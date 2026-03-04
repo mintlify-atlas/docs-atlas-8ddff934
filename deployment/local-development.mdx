@@ -1,0 +1,312 @@
+---
+title: Local Development
+description: Run The Fork backend and frontend locally without Docker
+---
+
+This guide covers running The Fork application locally for development without Docker. This approach gives you full control and faster iteration cycles.
+
+## Prerequisites
+
+- Node.js 18+
+- Python 3.11+
+- MongoDB (optional, bundled in docker-compose or cloud instance)
+- Emergent LLM API key (required for chat functionality)
+
+## Backend Setup
+
+<Steps>
+  <Step title="Navigate to backend directory">
+    ```bash
+    cd backend
+    ```
+  </Step>
+
+  <Step title="Create environment file">
+    Copy the example environment file and configure it:
+    
+    ```bash
+    cp .env.example .env
+    ```
+    
+    Edit `.env` with your configuration:
+    
+    ```bash backend/.env
+    # MongoDB Connection
+    MONGO_URL="mongodb://localhost:27017"
+    DB_NAME="test_database"
+    
+    # CORS Configuration
+    CORS_ORIGINS="*"
+    
+    # Emergent LLM Integration (REQUIRED)
+    # Get your API key from https://emergent.sh
+    EMERGENT_LLM_KEY=your_emergent_llm_key_here
+    
+    # Logging (optional)
+    LOG_LEVEL="INFO"
+    
+    # Server (optional)
+    SERVER_HOST="0.0.0.0"
+    SERVER_PORT=8000
+    ```
+    
+    <Warning>
+      The `EMERGENT_LLM_KEY` is required for chat functionality. Without it, the chat endpoint will return 500 errors.
+    </Warning>
+  </Step>
+
+  <Step title="Install Python dependencies">
+    ```bash
+    python -m pip install -r requirements.txt
+    ```
+    
+    Key dependencies include:
+    - FastAPI 0.110.1
+    - Uvicorn 0.25.0
+    - Motor 3.3.1 (async MongoDB driver)
+    - PyMongo 4.6.3
+    - Pydantic 2.6.4+
+    - python-dotenv 1.0.1+
+  </Step>
+
+  <Step title="Run tests">
+    Verify everything is set up correctly:
+    
+    ```bash
+    pytest
+    ```
+  </Step>
+
+  <Step title="Start the development server">
+    ```bash
+    uvicorn server:app --reload
+    ```
+    
+    The backend will be available at:
+    - API: http://localhost:8000/api/
+    - Swagger UI: http://localhost:8000/api/docs
+    - ReDoc: http://localhost:8000/api/redoc
+    
+    <Note>
+      The `--reload` flag enables auto-reload on code changes for faster development.
+    </Note>
+  </Step>
+</Steps>
+
+## Frontend Setup
+
+<Steps>
+  <Step title="Navigate to frontend directory">
+    ```bash
+    cd frontend
+    ```
+  </Step>
+
+  <Step title="Create environment file">
+    Copy the example environment file:
+    
+    ```bash
+    cp .env.example .env
+    ```
+    
+    Edit `.env` to point to your local backend:
+    
+    ```bash frontend/.env
+    # Backend API URL
+    REACT_APP_BACKEND_URL=http://localhost:8000
+    
+    # WebSocket Configuration (for development)
+    WDS_SOCKET_PORT=443
+    
+    # Feature Flags
+    ENABLE_HEALTH_CHECK=false
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    ```bash
+    yarn install
+    ```
+    
+    Key dependencies include:
+    - React 19.0.0
+    - React Router DOM 7.5.1
+    - Axios 1.8.4
+    - Tailwind CSS 3.4.17
+    - CRACO 7.1.0
+  </Step>
+
+  <Step title="Run E2E tests (optional)">
+    ```bash
+    yarn test:e2e
+    ```
+    
+    Additional test commands:
+    - `yarn test:e2e:ui` - Run tests in UI mode
+    - `yarn test:e2e:headed` - Run tests in headed browser mode
+  </Step>
+
+  <Step title="Start the development server">
+    ```bash
+    yarn start
+    ```
+    
+    The frontend will be available at:
+    - App: http://localhost:3000
+    
+    <Note>
+      The dev server includes hot module replacement (HMR) for instant updates during development.
+    </Note>
+  </Step>
+</Steps>
+
+## Verify Setup
+
+Once both services are running, test the connection:
+
+```bash
+curl -X POST http://localhost:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "forkStatement": "I chose engineering instead of art.",
+    "intensity": "savage",
+    "messages": [
+      {"role": "user", "content": "Do you regret it?"}
+    ],
+    "sessionId": "550e8400-e29b-41d4-a716-446655440000"
+  }'
+```
+
+Expected response:
+```json
+{
+  "reply": "[Response from Other You persona]"
+}
+```
+
+## Troubleshooting
+
+### Backend won't start
+
+<AccordionGroup>
+  <Accordion title="Check Python version">
+    ```bash
+    python --version
+    # Should be 3.11 or higher
+    ```
+  </Accordion>
+
+  <Accordion title="Verify EMERGENT_LLM_KEY">
+    ```bash
+    cd backend
+    cat .env | grep EMERGENT_LLM_KEY
+    ```
+    
+    If missing or invalid, you'll see 500 errors on the `/api/chat` endpoint.
+  </Accordion>
+
+  <Accordion title="Check for port conflicts">
+    ```bash
+    lsof -i :8000
+    # Kill any processes using port 8000
+    ```
+  </Accordion>
+
+  <Accordion title="View detailed logs">
+    Add `--log-level debug` to the uvicorn command:
+    
+    ```bash
+    uvicorn server:app --reload --log-level debug
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Frontend won't start
+
+<AccordionGroup>
+  <Accordion title="Check Node.js version">
+    ```bash
+    node --version
+    # Should be 18 or higher
+    ```
+  </Accordion>
+
+  <Accordion title="Clear node_modules and reinstall">
+    ```bash
+    rm -rf node_modules yarn.lock
+    yarn install
+    ```
+  </Accordion>
+
+  <Accordion title="Check for port conflicts">
+    ```bash
+    lsof -i :3000
+    # Kill any processes using port 3000
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### CORS errors
+
+If you see CORS errors in the browser console:
+
+1. Verify `CORS_ORIGINS` in `backend/.env` includes your frontend URL
+2. For local development, use `CORS_ORIGINS="*"` (not recommended for production)
+3. Restart the backend after changing CORS settings
+
+### MongoDB connection issues
+
+If you're using a local MongoDB instance:
+
+```bash
+# Check if MongoDB is running
+mongosh --eval "db.adminCommand('ping')"
+
+# If not running, start it (varies by OS)
+# macOS with Homebrew:
+brew services start mongodb-community
+
+# Linux with systemd:
+sudo systemctl start mongod
+```
+
+## Development Workflow
+
+### Making backend changes
+
+1. Edit files in `backend/`
+2. Server auto-reloads with `--reload` flag
+3. Test changes at http://localhost:8000/api/docs
+4. Run tests: `pytest`
+
+### Making frontend changes
+
+1. Edit files in `frontend/src/`
+2. Browser auto-reloads with HMR
+3. Check console for errors
+4. Run E2E tests: `yarn test:e2e`
+
+### Running both services
+
+Use two terminal windows/tabs:
+
+```bash
+# Terminal 1 - Backend
+cd backend && uvicorn server:app --reload
+
+# Terminal 2 - Frontend
+cd frontend && yarn start
+```
+
+Or use a process manager like `tmux` or `screen` to manage multiple sessions.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Docker Deployment" icon="docker" href="/deployment/docker">
+    Learn how to run The Fork using Docker Compose
+  </Card>
+  <Card title="Production Deployment" icon="server" href="/deployment/production">
+    Production deployment best practices and considerations
+  </Card>
+</CardGroup>

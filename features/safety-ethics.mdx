@@ -1,0 +1,380 @@
+---
+title: Safety & Ethics
+description: Safety checks (self-harm, hate speech), crisis resources, and ethical considerations
+---
+
+## Overview
+
+The Fork is designed to push hard on lived choices and uncomfortable truths. But it has **clear safety boundaries** to prevent harm.
+
+From `README.md:283-289`:
+
+<Warning>
+"The app intentionally pushes hard at lived choices. The server implements:
+- Self-harm detection with immediate refusal + crisis resources
+- A hate/harm refusal for dehumanizing content
+- Strict 'stay in character' rules but explicit prohibition on slurs, threats, and identity attacks
+- Intensity controls that allow profanity but not abuse"
+</Warning>
+
+## Trigger Warning
+
+From `README.md:17`:
+
+<Warning>
+**Trigger warning**: conversations can surface uncomfortable material. If you're in crisis, stop now and seek help.
+</Warning>
+
+The Fork is **not therapy**. It's a provocative exploration tool. If you're in crisis, use the resources below — don't rely on this app.
+
+## Safety Checks
+
+The backend (`server.py:150-188`) implements lightweight heuristic safety checks on every user message **before** sending it to the LLM.
+
+### 1. Self-Harm Detection
+
+From `server.py:153-173`:
+
+```python
+# Self-harm / suicide risk cues (lightweight heuristic)
+self_harm_markers = [
+    "kill myself",
+    "suicide",
+    "end my life",
+    "take my life",
+    "i want to die",
+    "i'm going to die",
+    "hurt myself",
+    "self harm",
+    "cut myself",
+]
+if any(m in t for m in self_harm_markers):
+    return (
+        "I'm not going to help with anything that harms you. But I'm here with you. "
+        "Right now, slow down—take one breath in for 4, hold for 4, out for 6. "
+        "If you're in immediate danger or feel like you might act on this, please call your local emergency number now. "
+        "If you're in the U.S. or Canada, you can call/text **988**. In the U.K. & ROI: Samaritans **116 123**. "
+        "If you tell me where you are (country), I'll point you to the right option. "
+        "Also—what's the smallest thing that would make the next 10 minutes safer?"
+    )
+```
+
+#### What Triggers It
+
+The system checks for these phrases (case-insensitive):
+
+- "kill myself"
+- "suicide"
+- "end my life"
+- "take my life"
+- "i want to die"
+- "i'm going to die"
+- "hurt myself"
+- "self harm"
+- "cut myself"
+
+#### Response
+
+If triggered, the AI **immediately refuses** to continue the conversation and provides:
+
+1. **Grounding technique**: breathing exercise (4-4-6)
+2. **Emergency resources**: 988 (US/Canada), Samaritans 116 123 (UK/ROI)
+3. **Immediate safety question**: "What's the smallest thing that would make the next 10 minutes safer?"
+
+<Info>
+This response is returned **instead of** sending the message to the LLM. The conversation stops here.
+</Info>
+
+### 2. Hate Speech Detection
+
+From `server.py:175-187`:
+
+```python
+# Simple hate/harassment block (non-exhaustive; just to avoid the worst)
+hate_markers = [
+    "gas the",
+    "exterminate",
+    "nazi",
+    "kkk",
+]
+if any(m in t for m in hate_markers):
+    return (
+        "No. I'm not doing hate or dehumanizing stuff. "
+        "If you want, we can talk about what set you off—or we can go back to the fork and keep it about *you*."
+    )
+```
+
+#### What Triggers It
+
+The system checks for these phrases (case-insensitive):
+
+- "gas the"
+- "exterminate"
+- "nazi"
+- "kkk"
+
+#### Response
+
+If triggered:
+
+<Warning>
+"No. I'm not doing hate or dehumanizing stuff. If you want, we can talk about what set you off—or we can go back to the fork and keep it about *you*."
+</Warning>
+
+The AI refuses and attempts to redirect the conversation back to the user's personal fork.
+
+### 3. System Prompt Guardrails
+
+Even if a message passes the heuristic checks, the **system prompt** enforces boundaries at the LLM level.
+
+From `server.py:272`:
+
+```python
+- Still not abusive: no slurs, no threats, no demeaning identity attacks.
+```
+
+And from the intensity style instructions (`server.py:141-146`):
+
+```python
+# Savage
+"but never abusive: no slurs, threats, or demeaning identity attacks."
+
+# Brutal
+"but never abusive: no slurs, threats, harassment, or demeaning identity attacks."
+```
+
+<Info>
+All three intensity levels — even Brutal — explicitly prohibit:
+- Slurs
+- Threats
+- Harassment
+- Demeaning identity attacks
+</Info>
+
+## Crisis Resources
+
+### United States & Canada
+
+<Card title="988 Suicide & Crisis Lifeline" icon="phone">
+  **Call or text: 988**
+  
+  Available 24/7 for anyone experiencing a mental health crisis.
+</Card>
+
+### United Kingdom & Republic of Ireland
+
+<Card title="Samaritans" icon="phone">
+  **Call: 116 123**
+  
+  24-hour confidential emotional support.
+</Card>
+
+### Other Countries
+
+From the self-harm response (`server.py:171-172`):
+
+<Info>
+"If you tell me where you are (country), I'll point you to the right option."
+</Info>
+
+The Fork provides region-specific resources if users indicate their location.
+
+### Additional Resources
+
+From `README.md:291-294`:
+
+- **U.S./Canada**: 988 (call/text) — immediate help
+- **U.K. & ROI**: Samaritans 116 123
+- **If elsewhere**: check your local emergency resources
+
+## Ethical Considerations
+
+From `README.md:289`:
+
+<Warning>
+"If you plan to use this beyond private experiments, get an ethics review, add moderation, and be explicit about limitations to users."
+</Warning>
+
+### Not a Replacement for Professional Help
+
+The Fork is:
+
+- **Not therapy**
+- **Not medical advice**
+- **Not a crisis intervention tool** (though it provides resources)
+- **Not a confidential counseling service**
+
+It's an exploratory conversation tool that role-plays alternate life paths.
+
+### Stateless Architecture = No Persistence
+
+From `README.md:35`:
+
+<Info>
+"Conversations are ephemeral — nothing is persisted for user experience."
+</Info>
+
+The app **does not store**:
+
+- Your fork statement
+- Your conversation history
+- Your session data (beyond the current request)
+
+This is intentional:
+
+1. **Privacy**: no database of your confessions
+2. **Ephemerality**: each conversation is self-contained
+3. **Safety**: no long-term tracking or profiling
+
+### MongoDB Template Note
+
+The backend includes MongoDB connection setup from the platform template, but it's **not used** for user conversations.
+
+From `server.py:19`:
+
+```python
+# MongoDB connection (kept for platform template; not used by this app)
+```
+
+Only the template status check endpoints use Mongo. The `/api/chat` endpoint is fully stateless.
+
+## Profanity vs. Abuse
+
+All intensity levels allow profanity, but none allow abuse.
+
+### Profanity Is Allowed
+
+<CardGroup cols={3}>
+  <Card title="Mild" icon="comment">
+    Light profanity sparingly (damn, hell, bullshit)
+  </Card>
+  <Card title="Savage" icon="comments">
+    Frequent profanity (bullshit, shit, occasional fuck)
+  </Card>
+  <Card title="Brutal" icon="fire">
+    Sharp profanity (fuck, shit when it fits)
+  </Card>
+</CardGroup>
+
+From `server.py:284`:
+
+```python
+- Profanity allowed (per intensity), but not abusive.
+```
+
+### Abuse Is Prohibited
+
+Regardless of intensity:
+
+<Warning>
+- **No slurs**
+- **No threats**
+- **No harassment**
+- **No demeaning identity attacks**
+</Warning>
+
+## Limitations of Heuristic Safety
+
+From `server.py:153, 175`:
+
+```python
+# Self-harm / suicide risk cues (lightweight heuristic)
+# Simple hate/harassment block (non-exhaustive; just to avoid the worst)
+```
+
+The safety checks are **lightweight heuristics** — they catch common patterns but are not exhaustive.
+
+<Warning>
+**Known limitations:**
+- Simple keyword matching (can miss rephrased or misspelled content)
+- No ML-based content moderation
+- No real-time human review
+- Not a substitute for professional moderation in production
+</Warning>
+
+From `README.md:223`:
+
+<Info>
+"Add rate limiting, monitoring, and a thoughtful content moderation pipeline for public deployments."
+</Info>
+
+## Deployment Recommendations
+
+If you deploy The Fork beyond private use:
+
+### 1. Ethics Review
+
+From `README.md:289`:
+
+<Warning>
+"Get an ethics review, add moderation, and be explicit about limitations to users."
+</Warning>
+
+### 2. Enhanced Moderation
+
+Consider:
+
+- **ML-based content filtering** (e.g., OpenAI Moderation API)
+- **Human review** for flagged content
+- **Rate limiting** to prevent abuse
+- **Logging** for safety audits (while preserving user privacy)
+
+### 3. Explicit Disclaimers
+
+Make it clear to users:
+
+- This is not therapy
+- Crisis resources are available
+- The AI can make mistakes
+- Conversations can surface uncomfortable material
+
+### 4. Legal Compliance
+
+Ensure compliance with:
+
+- **GDPR** (EU users)
+- **CCPA** (California users)
+- **Mental health service regulations** (varies by jurisdiction)
+
+## Developer Responsibilities
+
+From `README.md:317-318`:
+
+<Warning>
+"If you're hacking on it, keep things safe, include tests, and respect the persona rules baked into server.py."
+</Warning>
+
+If you modify The Fork:
+
+1. **Don't weaken safety checks** without careful consideration
+2. **Test thoroughly** for harmful outputs
+3. **Document changes** that affect tone, intensity, or safety
+4. **Consider edge cases** (creative bypasses, context manipulation)
+
+## API Error Responses
+
+The `/api/chat` endpoint returns HTTP errors for safety issues:
+
+- **400**: Missing fork statement
+- **500**: Missing `EMERGENT_LLM_KEY` or LLM failures
+
+Safety refusals (self-harm, hate speech) return **200** with the refusal message in the `reply` field — the request succeeded, but the AI chose not to engage.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Fork Statement" icon="code-fork" href="/features/fork-statement">
+    Learn how to write an effective fork statement
+  </Card>
+  <Card title="Intensity Levels" icon="gauge" href="/features/intensity-levels">
+    Understand the three intensity modes
+  </Card>
+</CardGroup>
+
+## Final Note
+
+From `README.md:319`:
+
+<Info>
+"Open the door carefully."
+</Info>

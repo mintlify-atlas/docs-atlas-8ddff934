@@ -1,0 +1,213 @@
+---
+title: Introduction
+description: Understanding The Fork - a thought-provoking app for conversing with the version of you who made different choices
+---
+
+# The Fork
+
+> One decision split your life in half. This app lets you talk to the version of you who took the other path.
+
+## What It Is (and What It Isn't)
+
+**What it is:**
+- A stateless, single-session chat that lets you talk to "Other You" - an LLM persona that role-plays the life you didn't choose
+- An exploration of alternate paths, consequences, and the weight of decisions
+- A blunt mirror that reflects lived consequences and tradeoffs
+
+**What it isn't:**
+- Therapy or professional mental health support
+- A confidant that stores your secrets (sessions are ephemeral)
+- A soft place to land by default - expect honesty over comfort
+
+**Tone:** Choose an intensity (mild / savage / brutal). The persona stays in-character and reflects lived consequences, tradeoffs, and blunt observations.
+
+<Warning>
+**Trigger Warning:** Conversations can surface uncomfortable material. If you're in crisis, stop now and seek help.
+
+Crisis resources:
+- **U.S./Canada:** 988 (call/text) - immediate help
+- **U.K. & ROI:** Samaritans 116 123
+- For other locations, check your local emergency resources
+</Warning>
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Alternate Timeline Persona" icon="user">
+    Talk to "Other You" - an AI that role-plays the life you didn't choose, with memories, routines, relationships, and lived consequences.
+  </Card>
+  
+  <Card title="Intensity Controls" icon="gauge-high">
+    Choose your experience: **mild** (supportive, reflective), **savage** (blunt, truth-forward), or **brutal** (no comfort, no flinching).
+  </Card>
+  
+  <Card title="Privacy-First" icon="shield">
+    Stateless and ephemeral - conversations are not persisted. Your fork statement and chat history live only in your session.
+  </Card>
+  
+  <Card title="Built-In Safety" icon="heart-pulse">
+    Self-harm detection, crisis resource responses, and hate speech blocking built into the backend.
+  </Card>
+</CardGroup>
+
+## How It Works
+
+<Steps>
+  <Step title="Define Your Fork">
+    You provide a fork statement - a single defining decision and the path you didn't take.
+    
+    Example: *"I chose engineering instead of art"* or *"I moved to the city instead of staying in my hometown"*
+  </Step>
+  
+  <Step title="Pick Your Intensity">
+    Select the tone level:
+    - **Mild:** Supportive, reflective, grounded. Still honest.
+    - **Savage:** Blunt, truth-forward, calls out avoidance and self-deception.
+    - **Brutal:** No comfort, no flinching. Extremely direct.
+  </Step>
+  
+  <Step title="Start Chatting">
+    The frontend posts your session (sessionId + messages + forkStatement + intensity) to the backend.
+  </Step>
+  
+  <Step title="AI Response">
+    The backend composes a system prompt (the "Other You" persona + safety checks + style mirroring), calls the Emergent LLM, and returns a reply.
+  </Step>
+  
+  <Step title="Ephemeral by Design">
+    Conversations are not stored. MongoDB exists in the template but is optional and unused for chat functionality.
+  </Step>
+</Steps>
+
+## Tech Stack
+
+### Frontend
+- **React** (Create React App)
+- **Tailwind CSS** for styling
+- **craco** for build customization
+- **Playwright** for E2E testing
+- **axios** for API communication
+
+### Backend
+- **FastAPI** - Modern Python web framework
+- **Uvicorn** - ASGI server
+- **Motor/PyMongo** - MongoDB async driver (optional)
+- **Pydantic** - Data validation
+- **Emergent LLM** - AI integration via `emergentintegrations.llm.chat`
+
+### Infrastructure
+- **Docker & Docker Compose** for containerization
+- **MongoDB 7.0** (optional for template compatibility)
+- **pytest** for backend testing
+- **GitHub Actions** for CI/CD
+
+## System Requirements
+
+<AccordionGroup>
+  <Accordion title="Development Environment">
+    - **Node.js** 18+ (with Yarn)
+    - **Python** 3.11+
+    - **Docker & Docker Compose** (optional but recommended)
+    - **MongoDB** (optional - only if you want to use the bundled mongo service)
+  </Accordion>
+  
+  <Accordion title="Required API Keys">
+    - **EMERGENT_LLM_KEY** - Required to enable chat functionality
+    - Get your API key from [Emergent](https://emergent.sh)
+  </Accordion>
+  
+  <Accordion title="Ports Used">
+    - **3000** - Frontend development server
+    - **8000** - Backend API server
+    - **27017** - MongoDB (if used)
+  </Accordion>
+</AccordionGroup>
+
+## Safety & Ethics
+
+The app intentionally pushes hard at lived choices. The server implements:
+
+<CardGroup cols={2}>
+  <Card title="Self-Harm Detection" icon="life-ring">
+    Immediate refusal with crisis resources when self-harm markers are detected in messages.
+  </Card>
+  
+  <Card title="Hate Speech Blocking" icon="ban">
+    Refusal responses for dehumanizing content and hate markers.
+  </Card>
+  
+  <Card title="Character Boundaries" icon="user-shield">
+    Strict "stay in character" rules with explicit prohibition on slurs, threats, and identity attacks.
+  </Card>
+  
+  <Card title="Intensity Guardrails" icon="sliders">
+    Controls allow profanity but never abuse - even at brutal intensity.
+  </Card>
+</CardGroup>
+
+<Note>
+If you plan to use this beyond private experiments, get an ethics review, add moderation, and be explicit about limitations to users.
+</Note>
+
+## Architecture Overview
+
+The Fork uses a simple client-server architecture:
+
+```
+┌─────────────┐         ┌─────────────┐         ┌──────────────┐
+│             │  HTTP   │             │   API   │              │
+│   React     │────────>│   FastAPI   │────────>│  Emergent    │
+│   Frontend  │  /chat  │   Backend   │         │     LLM      │
+│             │<────────│             │<────────│              │
+└─────────────┘         └─────────────┘         └──────────────┘
+                              │
+                              │ (optional)
+                              v
+                        ┌─────────────┐
+                        │   MongoDB   │
+                        │ (template)  │
+                        └─────────────┘
+```
+
+### Key Components
+
+**Backend (`backend/server.py:301-369`)**
+- `POST /api/chat` - Main chat endpoint
+- Safety checking functions
+- System prompt generation with intensity controls
+- Style mirroring logic to match user's writing mechanics
+
+**Frontend**
+- `ForkSetup.js` - Initial fork statement input
+- `ChatWindow.js` - Conversation interface
+- `IntensityToggle.js` - Intensity selector
+- `MessageBubble.js` - Message display component
+
+## Project Philosophy
+
+From the README:
+
+> If you came here to ask "what if?", do it honestly. The Fork won't make it gentle for you; it will make it real. If you're hacking on it, keep things safe, include tests, and respect the persona rules baked into server.py.
+>
+> Open the door carefully.
+
+This is a tool for introspection, not escapism. The design choices - from ephemeral sessions to intensity controls to built-in safety measures - reflect a balance between psychological challenge and responsible deployment.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Get Started" icon="rocket" href="/quickstart">
+    Follow the quickstart guide to set up your local development environment
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Explore the backend API endpoints and data models
+  </Card>
+</CardGroup>
+
+## License & Maintainers
+
+- **License:** MIT (see LICENSE)
+- **Maintainer:** Cassandra Crossno
+- **Repository:** [CassieMarie0728/the-fork](https://github.com/CassieMarie0728)
+- **LLM Integration:** Emergent team via emergentintegrations

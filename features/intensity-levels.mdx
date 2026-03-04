@@ -1,0 +1,222 @@
+---
+title: Intensity Levels
+description: The three intensity levels (mild, savage, brutal) with actual descriptions from the source code
+---
+
+## Overview
+
+The Fork offers three intensity levels that control how direct, provocative, and profane "Other You" will be in conversation. Each level maintains honesty but adjusts the delivery style.
+
+<Warning>
+All intensity levels allow profanity. None allow abuse, slurs, threats, or demeaning identity attacks.
+</Warning>
+
+## The Three Levels
+
+### Mild
+
+<Card title="MILD" icon="heart">
+  **Supportive. Honest. Still has a pulse.**
+</Card>
+
+From `server.py:131-136`:
+
+```python
+if intensity == "mild":
+    return (
+        "MILD: supportive, reflective, grounded. Still honest. "
+        "Use light profanity sparingly if it fits (e.g., 'damn', 'hell', 'bullshit'), "
+        "but keep it caring. No cruelty."
+    )
+```
+
+**Characteristics:**
+- Supportive, reflective, grounded
+- Still honest — doesn't sugarcoat
+- Light profanity sparingly (damn, hell, bullshit)
+- Caring tone
+- No cruelty
+
+**Use this when:** You want honest reflection without the edge. You're exploring a decision but need a gentler approach.
+
+---
+
+### Savage
+
+<Card title="SAVAGE" icon="bolt">
+  **Truthful. Biting. Calls you out.**
+</Card>
+
+From `server.py:137-142`:
+
+```python
+if intensity == "savage":
+    return (
+        "SAVAGE: blunt, truth-forward, calls out avoidance and self-deception. "
+        "Profanity is allowed and can be frequent (e.g., 'bullshit', 'what the hell', 'shit', occasional 'fuck'), "
+        "but never abusive: no slurs, threats, or demeaning identity attacks."
+    )
+```
+
+**Characteristics:**
+- Blunt and truth-forward
+- Calls out avoidance and self-deception
+- Frequent profanity (bullshit, what the hell, shit, occasional fuck)
+- Never abusive
+- No slurs, threats, or identity attacks
+
+**Use this when:** You want the truth without padding. You're ready to be called out on avoidance and excuses.
+
+---
+
+### Brutal
+
+<Card title="BRUTAL" icon="fire">
+  **No comfort. No flinching. Still not abusive.**
+</Card>
+
+From `server.py:143-147`:
+
+```python
+return (
+    "BRUTAL: no comfort, no flinching. Extremely direct. "
+    "Profanity is allowed (sharp, candid — yes, including 'fuck' and 'shit' when it fits), "
+    "but never abusive: no slurs, threats, harassment, or demeaning identity attacks."
+)
+```
+
+**Characteristics:**
+- No comfort, no flinching
+- Extremely direct
+- Profanity allowed (including fuck and shit when it fits)
+- Sharp and candid
+- Never abusive: no slurs, threats, harassment, or identity attacks
+
+**Use this when:** You need maximum honesty with zero softening. You're prepared for the hardest truths.
+
+---
+
+## Comparison Table
+
+| Feature | Mild | Savage | Brutal |
+|---------|------|--------|--------|
+| **Tone** | Supportive, reflective | Blunt, truth-forward | No comfort, extremely direct |
+| **Profanity** | Light, sparingly | Frequent | Sharp, candid |
+| **Examples** | damn, hell, bullshit | bullshit, shit, occasional fuck | fuck, shit when it fits |
+| **Calls out avoidance** | Gently | Directly | Relentlessly |
+| **Safety guardrails** | Yes | Yes | Yes |
+
+## Frontend Display
+
+The intensity selector appears in the setup screen with these labels (from `constants.js:4-23`):
+
+<CodeGroup>
+```javascript Mild
+{
+  label: "Mild",
+  hint: "Supportive. Honest. Still has a pulse.",
+  badge: "MILD",
+  typing: "Other You is choosing their words…"
+}
+```
+
+```javascript Savage
+{
+  label: "Savage",
+  hint: "Truthful. Biting. Calls you out.",
+  badge: "SAVAGE",
+  typing: "Other You is loading ammunition…"
+}
+```
+
+```javascript Brutal
+{
+  label: "Brutal",
+  hint: "No comfort. No flinching. Still not abusive.",
+  badge: "BRUTAL",
+  typing: "Other You is sharpening the knife…"
+}
+```
+</CodeGroup>
+
+## How Intensity Affects the Conversation
+
+Intensity influences several aspects of the AI's behavior:
+
+### 1. Profanity Mirroring
+
+From `server.py:237-240`:
+
+```python
+style_bits.append(
+    "Mirror the user's swearing level; in Savage/Brutal you can go one notch dirtier."
+)
+```
+
+The AI mirrors your language style but can escalate slightly in higher intensities.
+
+### 2. Paragraph Structure
+
+From `server.py:243-246`:
+
+```python
+if intensity in ("savage", "brutal"):
+    style_bits.append("No long paragraphs. 1–2 sentences per paragraph max.")
+else:
+    style_bits.append("Keep paragraphs tight. Don't ramble.")
+```
+
+Higher intensities favor shorter, punchier paragraphs.
+
+### 3. Base Persona
+
+All intensities share the same base voice (from `server.py:267-272`):
+
+<Info>
+"You have the vibe of a smartass biker with absolutely zero filter in a public setting. You're sharp, funny, and blunt. You say the quiet part out loud. You use gritty, lived-in language (road, miles, bars, weather, bruises, engines, cheap coffee)."
+</Info>
+
+## Technical Implementation
+
+The intensity is set in the frontend and passed to the backend API:
+
+```typescript
+type Intensity = "mild" | "savage" | "brutal";
+```
+
+From `server.py:84`:
+
+```python
+Intensity = Literal["mild", "savage", "brutal"]
+```
+
+### Default Value
+
+If not specified, the intensity defaults to **"mild"** (`server.py:102-104`).
+
+## Changing Intensity Mid-Conversation
+
+<Warning>
+The Fork is a stateless chat. Each request includes the full conversation history + current intensity setting. You can change intensity between messages, and the AI will adjust its tone accordingly.
+</Warning>
+
+## Safety Note
+
+Regardless of intensity level, the backend enforces safety checks:
+
+- Self-harm detection (returns crisis resources)
+- Hate speech detection (refuses and redirects)
+- System prompt prohibits slurs, threats, and identity attacks
+
+See [Safety & Ethics](/features/safety-ethics) for full details.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Fork Statement" icon="code-fork" href="/features/fork-statement">
+    Learn how to write an effective fork statement
+  </Card>
+  <Card title="Chat Experience" icon="comments" href="/features/chat-experience">
+    Understand how the conversation works
+  </Card>
+</CardGroup>

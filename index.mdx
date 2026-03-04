@@ -1,97 +1,200 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "The Fork"
+description: "Speak to the you who lived the life you didn't choose"
 ---
 
-## Setting up
+<div className="relative overflow-hidden bg-gradient-to-br from-[#DC143C] via-[#B22222] to-black dark:from-[#DC143C] dark:via-[#B22222] dark:to-[#0f1117] py-20">
+  <div className="absolute inset-0 bg-black/40 dark:bg-black/50"></div>
+  <div className="relative max-w-6xl mx-auto px-6 lg:px-8">
+    <div className="text-center">
+      <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-6">
+        The Fork
+      </h1>
+      <p className="text-xl lg:text-2xl text-white/90 max-w-3xl mx-auto mb-10">
+        One decision. One alternate you. No history. No comfort.
+      </p>
+      <div className="flex flex-col sm:flex-row gap-4 justify-center flex-wrap">
+        <a
+          href="/quickstart"
+          className="inline-flex items-center justify-center px-8 py-3.5 text-base font-semibold rounded-lg bg-white text-[#DC143C] hover:bg-gray-100 transition-colors no-underline"
+        >
+          Get Started
+          <span className="ml-2">→</span>
+        </a>
+        <a
+          href="/api/overview"
+          className="inline-flex items-center justify-center px-8 py-3.5 text-base font-semibold rounded-lg border border-white/30 bg-white/10 text-white hover:bg-white/20 transition-colors no-underline"
+        >
+          API Reference
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
 
-Get your documentation site up and running in minutes.
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+    Quick Start
+  </h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+    Get The Fork running locally in minutes
+  </p>
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+  <Steps>
+    <Step title="Clone the repository">
+      Clone The Fork from GitHub and navigate to the project directory.
 
-## Make it yours
+      ```bash
+      git clone https://github.com/CassieMarie0728/the-fork.git
+      cd the-fork
+      ```
+    </Step>
 
-Design a docs site that looks great and empowers your users.
+    <Step title="Set up your environment">
+      Copy the environment template and add your Emergent LLM API key.
 
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
-  </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
-  </Card>
+      ```bash
+      # Backend configuration
+      cd backend
+      cp .env.example .env
+      # Edit .env and set EMERGENT_LLM_KEY
+      ```
+
+      <Note>
+        You need an `EMERGENT_LLM_KEY` to enable chat functionality. The application won't work without it.
+      </Note>
+    </Step>
+
+    <Step title="Run with Docker Compose">
+      Launch the full stack with a single command.
+
+      ```bash
+      docker-compose up --build
+      ```
+
+      Access the application at `http://localhost:3000` and the API at `http://localhost:8000`.
+    </Step>
+
+    <Step title="Create your first conversation">
+      Open the app, enter a fork statement describing the path you didn't take, select an intensity level, and start talking to your alternate self.
+
+      <Info>
+        All conversations are stateless and ephemeral. Nothing is persisted beyond the current session.
+      </Info>
+    </Step>
+  </Steps>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+    Explore by Topic
+  </h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+    Learn how The Fork works and how to deploy it
+  </p>
+
+  <CardGroup cols={2}>
     <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
-  </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
-  </Card>
-</Columns>
+      title="Fork Statement"
+      icon="code-branch"
+      href="/features/fork-statement"
+    >
+      Define the decision that split your life in half and the path you didn't take
+    </Card>
+    <Card
+      title="Intensity Levels"
+      icon="gauge-high"
+      href="/features/intensity-levels"
+    >
+      Control how direct and provocative your alternate self responds: mild, savage, or brutal
+    </Card>
+    <Card
+      title="Chat Experience"
+      icon="comments"
+      href="/features/chat-experience"
+    >
+      Understand the stateless, single-session conversation model and AI persona
+    </Card>
+    <Card
+      title="Safety & Ethics"
+      icon="shield-halved"
+      href="/features/safety-ethics"
+    >
+      Learn about built-in safety checks and ethical considerations
+    </Card>
+    <Card
+      title="Local Development"
+      icon="laptop-code"
+      href="/deployment/local-development"
+    >
+      Run the frontend and backend locally for development
+    </Card>
+    <Card
+      title="Docker Deployment"
+      icon="docker"
+      href="/deployment/docker"
+    >
+      Deploy the full stack with Docker Compose
+    </Card>
+  </CardGroup>
+</div>
 
-## Create beautiful pages
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+    API Reference
+  </h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+    Integrate The Fork API into your own applications
+  </p>
 
-Everything you need to create world-class documentation.
+  <CardGroup cols={2}>
+    <Card
+      title="Chat Endpoint"
+      icon="message"
+      href="/api/chat"
+    >
+      Send messages and receive responses from the alternate self persona
+    </Card>
+    <Card
+      title="Environment Variables"
+      icon="gear"
+      href="/api/environment-variables"
+    >
+      Configure the backend with required and optional environment variables
+    </Card>
+    <Card
+      title="Error Handling"
+      icon="triangle-exclamation"
+      href="/api/error-handling"
+    >
+      Handle API errors, safety responses, and validation failures
+    </Card>
+    <Card
+      title="API Overview"
+      icon="book"
+      href="/api/overview"
+    >
+      Understand the FastAPI architecture and available endpoints
+    </Card>
+  </CardGroup>
+</div>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
-
-## Need inspiration?
-
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+<div className="mt-20 mb-16 max-w-5xl mx-auto px-6">
+  <div className="rounded-2xl border border-gray-200 dark:border-[#27272a] bg-gray-50 dark:bg-[#1a1d27] p-8 lg:p-12">
+    <div className="text-center">
+      <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+        Ready to open the other door?
+      </h2>
+      <p className="text-base text-gray-600 dark:text-gray-400 mb-8 max-w-2xl mx-auto">
+        Get The Fork running locally or dive into the API documentation to integrate it into your own application.
+      </p>
+      <a
+        href="/quickstart"
+        className="inline-flex items-center justify-center px-8 py-3.5 text-base font-semibold rounded-lg bg-[#DC143C] text-white hover:bg-[#B22222] transition-colors no-underline"
+      >
+        Get Started
+        <span className="ml-2">→</span>
+      </a>
+    </div>
+  </div>
+</div>

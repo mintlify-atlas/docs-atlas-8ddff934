@@ -1,0 +1,132 @@
+---
+title: Fork Statement
+description: The life decision that split your path - what it is, how to write one, and examples from real use
+---
+
+## What is a Fork Statement?
+
+A fork statement is the core input that defines your entire conversation with "Other You." It's a single defining life decision and the path you **didn't** take.
+
+Think of it as the moment your life split in two — one version of you went left, the other went right. The Fork lets you talk to the version who took the other path.
+
+<Warning>
+Be specific. Don't hide behind vague.
+</Warning>
+
+## How to Write a Fork Statement
+
+A good fork statement has three key elements:
+
+1. **The decision point** — what you chose
+2. **The alternate path** — what you didn't choose
+3. **Specificity** — names, ages, locations, what you feared, what you wanted
+
+### Structure
+
+The most effective fork statements follow this pattern:
+
+```
+"I [chose X] instead of [choosing Y]."
+```
+
+### Examples from the Source Code
+
+These examples appear in the frontend placeholder text (`frontend/src/components/ForkSetup.js:76-77`):
+
+<CodeGroup>
+```text Navy vs. Family
+"I joined the Navy instead of staying home to start a family."
+```
+
+```text Law vs. Art
+"I chose law school instead of art."
+```
+
+```text City vs. Love
+"I left my hometown instead of marrying my high school love."
+```
+</CodeGroup>
+
+### What Makes a Strong Fork Statement
+
+<CardGroup cols={2}>
+  <Card title="Strong" icon="check" color="#22c55e">
+    - Concrete life choices
+    - Clear alternate path
+    - Emotional weight
+    - Real stakes
+  </Card>
+  <Card title="Weak" icon="xmark" color="#ef4444">
+    - Vague or generic
+    - No clear alternate
+    - Low stakes
+    - Abstract concepts
+  </Card>
+</CardGroup>
+
+## How the Backend Uses Your Fork Statement
+
+When you submit a fork statement, the backend (`backend/server.py:254-298`):
+
+1. **Truncates it** to 180 characters for the system prompt (though the full statement is validated)
+2. **Embeds it** in the "Other You" persona instructions
+3. **Requires it** as lived history that the AI must reference naturally
+
+From `server.py:294-295`:
+
+```python
+FORK STATEMENT (their confession):
+"{fork_short}"
+```
+
+The system prompt explicitly instructs the AI:
+
+<Info>
+"You must treat the fork statement as a defining life decision you actually lived through. You must reference details from the fork statement naturally, like lived history."
+</Info>
+
+## Technical Details
+
+### API Requirements
+
+The fork statement is **required** by the `/api/chat` endpoint. From `server.py:313-315`:
+
+```python
+fork = (req.forkStatement or "").strip()
+if not fork:
+    raise HTTPException(status_code=400, detail="forkStatement is required")
+```
+
+### Character Limit
+
+While there's no hard limit on input, the system message uses a truncated version:
+
+```python
+def _truncate(text: str, n: int = 220) -> str:
+    t = (text or "").strip()
+    return t if len(t) <= n else t[: n - 1] + "…"
+```
+
+<Tip>
+For best results, keep your fork statement under 220 characters. Longer statements will be truncated in the AI's system instructions.
+</Tip>
+
+## Frontend Implementation
+
+The fork statement input appears in the setup screen (`ForkSetup.js:63-86`):
+
+- Multi-line textarea (4 rows)
+- Placeholder with three examples
+- Real-time validation (must have content to enable "Open the Other Door" button)
+- Helper text: "Required. Be specific. Don't hide behind vague."
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Intensity Levels" icon="gauge" href="/features/intensity-levels">
+    Choose how direct and provocative the AI should be
+  </Card>
+  <Card title="Chat Experience" icon="comments" href="/features/chat-experience">
+    Learn how the conversation unfolds
+  </Card>
+</CardGroup>

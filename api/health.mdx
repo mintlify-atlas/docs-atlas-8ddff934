@@ -1,0 +1,161 @@
+---
+title: 'GET /api/'
+description: 'Health check endpoint to verify API availability'
+---
+
+## Endpoint
+
+```http
+GET /api/
+```
+
+Verify that the API is running and responsive.
+
+## Request
+
+No parameters or request body required.
+
+## Response
+
+<ResponseField name="message" type="string" required>
+  Confirmation message that the API is operational.
+  
+  **Value:** `"The Fork API is alive."`
+</ResponseField>
+
+## Example
+
+<Tabs>
+  <Tab title="cURL">
+    ```bash
+    curl http://localhost:8000/api/
+    ```
+
+    **Response:**
+    ```json
+    {
+      "message": "The Fork API is alive."
+    }
+    ```
+  </Tab>
+
+  <Tab title="JavaScript (fetch)">
+    ```javascript
+    fetch('http://localhost:8000/api/')
+      .then(res => res.json())
+      .then(data => console.log(data.message))
+    // Output: "The Fork API is alive."
+    ```
+  </Tab>
+
+  <Tab title="Python (requests)">
+    ```python
+    import requests
+
+    response = requests.get('http://localhost:8000/api/')
+    print(response.json())
+    # Output: {'message': 'The Fork API is alive.'}
+    ```
+  </Tab>
+
+  <Tab title="HTTPie">
+    ```bash
+    http GET http://localhost:8000/api/
+    ```
+  </Tab>
+</Tabs>
+
+## Status Code
+
+| Code | Description |
+|------|-------------|
+| `200` | API is operational |
+
+## Use Cases
+
+### Monitoring
+
+Use this endpoint for:
+
+- **Health checks** in container orchestration (Kubernetes, Docker Compose)
+- **Uptime monitoring** services
+- **Load balancer** health probes
+- **Pre-deployment verification**
+
+### Example: Docker Compose Health Check
+
+```yaml
+services:
+  api:
+    image: the-fork-api:latest
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+```
+
+### Example: Kubernetes Liveness Probe
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fork-api
+spec:
+  containers:
+  - name: api
+    image: the-fork-api:latest
+    livenessProbe:
+      httpGet:
+        path: /api/
+        port: 8000
+      initialDelaySeconds: 15
+      periodSeconds: 20
+```
+
+## Implementation
+
+From `source/backend/server.py:48-54`:
+
+```python
+@api_router.get(
+    "/",
+    summary="Health check",
+    description="Verify that the API is running"
+)
+async def root():
+    return {"message": "The Fork API is alive."}
+```
+
+<Note>
+This is a simple ping endpoint. It doesn't verify database connectivity, LLM API availability, or other dependencies.
+</Note>
+
+## When to Use
+
+<CardGroup cols={2}>
+  <Card title="Do Use For" icon="check">
+    - Verifying server is running
+    - Basic uptime checks
+    - Container health probes
+    - Quick smoke tests
+  </Card>
+  <Card title="Don't Rely On For" icon="xmark">
+    - Database connectivity
+    - LLM API availability
+    - Full system readiness
+    - Dependency validation
+  </Card>
+</CardGroup>
+
+## Alternative: FastAPI Built-in Docs
+
+For a more comprehensive health check, you can also ping the OpenAPI docs:
+
+```bash
+curl http://localhost:8000/api/openapi.json
+```
+
+This verifies that FastAPI's routing and schema generation are working.

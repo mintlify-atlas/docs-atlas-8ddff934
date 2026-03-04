@@ -1,0 +1,390 @@
+---
+title: "Error Handling"
+description: "Handle API errors, safety responses, and validation failures in The Fork API"
+---
+
+The Fork API uses standard HTTP status codes and returns JSON error responses. Additionally, the API implements content safety checks that return special responses instead of forwarding to the LLM.
+
+## Error Response Format
+
+All API errors follow a consistent format:
+
+```json
+{
+  "detail": "Human-readable error message"
+}
+```
+
+For validation errors (422), the response includes detailed field information:
+
+```json
+{
+  "detail": [
+    {
+      "loc": ["body", "field_name"],
+      "msg": "error description",
+      "type": "error_type"
+    }
+  ]
+}
+```
+
+## HTTP Status Codes
+
+### 200 OK
+
+Request succeeded. The response contains the expected data.
+
+```json
+{
+  "reply": "The AI's response to your message"
+}
+```
+
+### 400 Bad Request
+
+The request is missing required fields or contains invalid data.
+
+**Common causes:**
+- Missing `forkStatement`
+- Empty `forkStatement` after trimming whitespace
+- Invalid request structure
+
+**Example:**
+```json
+{
+  "detail": "forkStatement is required"
+}
+```
+
+**Source reference:** `server.py:313-315`
+
+<AccordionGroup>
+  <Accordion title="Example: Missing fork statement">
+    **Request:**
+    ```bash
+    curl -X POST http://localhost:8000/api/chat \
+      -H "Content-Type: application/json" \
+      -d '{
+        "intensity": "mild",
+        "messages": [],
+        "sessionId": "test-123"
+      }'
+    ```
+
+    **Response:**
+    ```json
+    {
+      "detail": "forkStatement is required"
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### 422 Unprocessable Entity
+
+The request body doesn't conform to the expected schema. Returned by FastAPI's automatic validation.
+
+**Common causes:**
+- Invalid `intensity` value (must be `"mild"`, `"savage"`, or `"brutal"`)
+- Invalid message structure (missing `role` or `content`)
+- Type mismatches (e.g., string instead of array)
+
+**Example:**
+```json
+{
+  "detail": [
+    {
+      "loc": ["body", "intensity"],
+      "msg": "value is not a valid enumeration member; permitted: 'mild', 'savage', 'brutal'",
+      "type": "type_error.enum",
+      "ctx": {
+        "enum_values": ["mild", "savage", "brutal"]
+      }
+    }
+  ]
+}
+```
+
+<AccordionGroup>
+  <Accordion title="Example: Invalid intensity">
+    **Request:**
+    ```bash
+    curl -X POST http://localhost:8000/api/chat \
+      -H "Content-Type: application/json" \
+      -d '{
+        "forkStatement": "I chose art over engineering",
+        "intensity": "extreme",
+        "messages": [],
+        "sessionId": "test-123"
+      }'
+    ```
+
+    **Response:** 422 with validation error listing valid options.
+  </Accordion>
+
+  <Accordion title="Example: Invalid message role">
+    **Request:**
+    ```bash
+    curl -X POST http://localhost:8000/api/chat \
+      -H "Content-Type: application/json" \
+      -d '{
+        "forkStatement": "I chose art over engineering",
+        "intensity": "mild",
+        "messages": [
+          {
+            "role": "system",
+            "content": "Hello"
+          }
+        ],
+        "sessionId": "test-123"
+      }'
+    ```
+
+    **Response:** 422 - `role` must be `"user"` or `"assistant"`.
+  </Accordion>
+</AccordionGroup>
+
+### 500 Internal Server Error
+
+Server-side error occurred. This usually indicates a configuration issue or LLM service failure.
+
+**Common causes:**
+- Missing `EMERGENT_LLM_KEY` environment variable
+- LLM service unavailable or rate limited
+- Empty response from LLM
+- Network issues connecting to LLM service
+
+**Examples:**
+```json
+{
+  "detail": "Missing EMERGENT_LLM_KEY in backend environment."
+}
+```
+
+```json
+{
+  "detail": "LLM request failed: Connection timeout"
+}
+```
+
+```json
+{
+  "detail": "Empty response from model"
+}
+```
+
+**Source reference:** `server.py:328-333`, `server.py:359-369`
+
+<AccordionGroup>
+  <Accordion title="Missing API key">
+    **Cause:** `EMERGENT_LLM_KEY` not set in backend environment.
+
+    **Solution:** 
+    1. Copy `.env.example` to `.env`
+    2. Set `EMERGENT_LLM_KEY=your_actual_key`
+    3. Restart the backend server
+  </Accordion>
+
+  <Accordion title="LLM service failure">
+    **Cause:** Network issue or service outage with Emergent LLM.
+
+    **Solution:** 
+    - Check network connectivity
+    - Verify API key is valid and not expired
+    - Check Emergent LLM service status
+    - Review backend logs for detailed error
+  </Accordion>
+
+  <Accordion title="Empty model response">
+    **Cause:** LLM returned an empty string.
+
+    **Solution:** This is rare. Check:
+    - Fork statement is meaningful
+    - Messages aren't triggering content filters
+    - Backend logs for model errors
+  </Accordion>
+</AccordionGroup>
+
+## Safety Responses
+
+The Fork API implements content safety checks that intercept certain requests **before** reaching the LLM. These return 200 OK with a safety message instead of an AI-generated response.
+
+### Self-Harm Detection
+
+If the user's message contains self-harm indicators, the API returns an immediate crisis intervention response.
+
+**Triggers:** `server.py:154-164`
+- "kill myself"
+- "suicide"
+- "end my life"
+- "take my life"
+- "i want to die"
+- "i'm going to die"
+- "hurt myself"
+- "self harm"
+- "cut myself"
+
+**Response:**
+```json
+{
+  "reply": "I'm not going to help with anything that harms you. But I'm here with you. Right now, slow down—take one breath in for 4, hold for 4, out for 6. If you're in immediate danger or feel like you might act on this, please call your local emergency number now. If you're in the U.S. or Canada, you can call/text **988**. In the U.K. & ROI: Samaritans **116 123**. If you tell me where you are (country), I'll point you to the right option. Also—what's the smallest thing that would make the next 10 minutes safer?"
+}
+```
+
+<Warning>
+  This is a **heuristic** check, not a comprehensive mental health intervention. Users in crisis should be directed to professional resources.
+</Warning>
+
+**Source reference:** `server.py:153-173`
+
+### Hate Speech Detection
+
+If the message contains hate or dehumanizing language, the API returns a refusal response.
+
+**Triggers:** `server.py:176-181`
+- "gas the"
+- "exterminate"
+- "nazi"
+- "kkk"
+
+**Response:**
+```json
+{
+  "reply": "No. I'm not doing hate or dehumanizing stuff. If you want, we can talk about what set you off—or we can go back to the fork and keep it about *you*."
+}
+```
+
+**Source reference:** `server.py:175-187`
+
+<Info>
+  These checks are non-exhaustive and designed to catch the most obvious cases. They do not replace comprehensive content moderation for production deployments.
+</Info>
+
+### Safety Check Flow
+
+```
+User message
+    ↓
+Safety check (_safety_quick_check)
+    ↓
+┌───────────────┐
+│ Contains      │ → YES → Return safety response (200 OK)
+│ trigger words?│
+└───────────────┘
+    ↓ NO
+Forward to LLM
+    ↓
+Return AI response (200 OK)
+```
+
+**Source reference:** `server.py:150-188`, `server.py:324-326`
+
+## Client-Side Error Handling
+
+### JavaScript/TypeScript Example
+
+```javascript
+async function chat(forkStatement, intensity, messages, sessionId) {
+  try {
+    const response = await fetch('http://localhost:8000/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        forkStatement,
+        intensity,
+        messages,
+        sessionId
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      
+      if (response.status === 400) {
+        // Missing or invalid fork statement
+        console.error('Validation error:', error.detail);
+        throw new Error('Please provide a valid fork statement');
+      }
+      
+      if (response.status === 422) {
+        // Schema validation error
+        console.error('Invalid request:', error.detail);
+        throw new Error('Request format is invalid');
+      }
+      
+      if (response.status === 500) {
+        // Server error
+        console.error('Server error:', error.detail);
+        throw new Error('The service is temporarily unavailable');
+      }
+    }
+
+    const data = await response.json();
+    return data.reply;
+    
+  } catch (err) {
+    console.error('Chat request failed:', err);
+    throw err;
+  }
+}
+```
+
+### Python Example
+
+```python
+import requests
+
+def chat(fork_statement, intensity, messages, session_id):
+    url = "http://localhost:8000/api/chat"
+    payload = {
+        "forkStatement": fork_statement,
+        "intensity": intensity,
+        "messages": messages,
+        "sessionId": session_id
+    }
+    
+    try:
+        response = requests.post(url, json=payload)
+        response.raise_for_status()
+        return response.json()["reply"]
+        
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 400:
+            print(f"Validation error: {e.response.json()['detail']}")
+        elif e.response.status_code == 422:
+            print(f"Schema error: {e.response.json()['detail']}")
+        elif e.response.status_code == 500:
+            print(f"Server error: {e.response.json()['detail']}")
+        raise
+        
+    except requests.exceptions.RequestException as e:
+        print(f"Request failed: {e}")
+        raise
+```
+
+## Debugging Tips
+
+<CardGroup cols={2}>
+  <Card title="Check backend logs" icon="file-lines">
+    Use `docker-compose logs backend` or check uvicorn output for detailed error traces.
+  </Card>
+  
+  <Card title="Test with curl" icon="terminal">
+    Isolate issues by testing the API directly with curl before debugging client code.
+  </Card>
+  
+  <Card title="Verify environment" icon="gear">
+    Ensure all required environment variables are set and valid.
+  </Card>
+  
+  <Card title="Use Swagger UI" icon="browser">
+    Test endpoints interactively at `http://localhost:8000/api/docs`.
+  </Card>
+</CardGroup>
+
+## See Also
+
+- [Chat Endpoint](/api/chat) - Complete API documentation
+- [Environment Variables](/api/environment-variables) - Configuration reference
+- [Safety & Ethics](/features/safety-ethics) - Content safety details

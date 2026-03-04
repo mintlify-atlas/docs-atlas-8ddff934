@@ -1,0 +1,305 @@
+---
+title: 'POST /api/chat'
+description: 'Chat with your alternate self based on a pivotal life decision'
+---
+
+## Endpoint
+
+```http
+POST /api/chat
+```
+
+Send a message and receive a response from your alternate self—the version of you who took the path you didn't.
+
+## Request Body
+
+<ParamField body="forkStatement" type="string" required>
+  The life decision that split your path. Be specific and personal.
+  
+  **Example:** `"I chose to move to the city instead of staying in my hometown"`
+</ParamField>
+
+<ParamField body="intensity" type="enum" default="mild">
+  How direct and provocative the AI should be.
+  
+  **Options:**
+  - `"mild"` - Supportive, reflective, grounded. Light profanity if it fits.
+  - `"savage"` - Blunt, truth-forward. Calls out avoidance and self-deception.
+  - `"brutal"` - No comfort, no flinching. Extremely direct.
+  
+  <Note>All intensity levels avoid abusive language, slurs, threats, or identity attacks.</Note>
+</ParamField>
+
+<ParamField body="messages" type="array" default="[]">
+  Conversation history (array of message objects).
+  
+  Each message contains:
+  - `role` (string, required): `"user"` or `"assistant"`
+  - `content` (string, required): The message text
+</ParamField>
+
+<ParamField body="sessionId" type="string" required>
+  Unique session identifier for tracking without storage.
+  
+  **Example:** `"550e8400-e29b-41d4-a716-446655440000"`
+  
+  <Tip>Generate a new UUID for each conversation. The server doesn't persist sessions.</Tip>
+</ParamField>
+
+## Request Schema
+
+### ChatRequest Model
+
+```python
+class ChatRequest(BaseModel):
+    forkStatement: str
+    intensity: Literal["mild", "savage", "brutal"] = "mild"
+    messages: List[ChatMessage] = []
+    sessionId: str
+```
+
+### ChatMessage Model
+
+```python
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+```
+
+## Response
+
+<ResponseField name="reply" type="string" required>
+  The alternate self's response to your message.
+</ResponseField>
+
+### ChatResponse Model
+
+```python
+class ChatResponse(BaseModel):
+    reply: str
+```
+
+## Examples
+
+<Tabs>
+  <Tab title="First Message">
+    Send your first message to start a conversation:
+
+    ```bash
+    curl -X POST http://localhost:8000/api/chat \
+      -H "Content-Type: application/json" \
+      -d '{
+        "forkStatement": "I chose to pursue music instead of a stable career",
+        "intensity": "mild",
+        "messages": [],
+        "sessionId": "550e8400-e29b-41d4-a716-446655440000"
+      }'
+    ```
+
+    **Response:**
+    ```json
+    {
+      "reply": "So you're asking what I'm doing? I'm playing dive bars on Tuesday nights..."
+    }
+    ```
+  </Tab>
+
+  <Tab title="Continuing Conversation">
+    Continue the conversation by including message history:
+
+    ```bash
+    curl -X POST http://localhost:8000/api/chat \
+      -H "Content-Type: application/json" \
+      -d '{
+        "forkStatement": "I chose engineering instead of art",
+        "intensity": "savage",
+        "messages": [
+          {
+            "role": "user",
+            "content": "What would my life look like?"
+          },
+          {
+            "role": "assistant",
+            "content": "You would be broke with a portfolio full of work nobody pays you for."
+          },
+          {
+            "role": "user",
+            "content": "But would I be happy?"
+          }
+        ],
+        "sessionId": "550e8400-e29b-41d4-a716-446655440000"
+      }'
+    ```
+
+    **Response:**
+    ```json
+    {
+      "reply": "Happy? Some days. Broke? Every day. But at least you'd know what you're avoiding right now."
+    }
+    ```
+  </Tab>
+
+  <Tab title="Brutal Intensity">
+    Request maximum directness:
+
+    ```bash
+    curl -X POST http://localhost:8000/api/chat \
+      -H "Content-Type: application/json" \
+      -d '{
+        "forkStatement": "I stayed in my hometown instead of moving for my career",
+        "intensity": "brutal",
+        "messages": [],
+        "sessionId": "abc-123-xyz"
+      }'
+    ```
+  </Tab>
+</Tabs>
+
+## Error Responses
+
+### 400 Bad Request
+
+Missing or empty `forkStatement`:
+
+```json
+{
+  "detail": "forkStatement is required"
+}
+```
+
+### 422 Unprocessable Entity
+
+Invalid request structure (e.g., wrong intensity value):
+
+```json
+{
+  "detail": [
+    {
+      "loc": ["body", "intensity"],
+      "msg": "value is not a valid enumeration member; permitted: 'mild', 'savage', 'brutal'",
+      "type": "type_error.enum"
+    }
+  ]
+}
+```
+
+### 500 Internal Server Error
+
+Missing API key:
+
+```json
+{
+  "detail": "Missing EMERGENT_LLM_KEY in backend environment."
+}
+```
+
+LLM request failure:
+
+```json
+{
+  "detail": "LLM request failed: Connection timeout"
+}
+```
+
+Empty model response:
+
+```json
+{
+  "detail": "Empty response from model"
+}
+```
+
+## Safety Features
+
+The endpoint includes automatic content moderation:
+
+### Self-Harm Detection
+
+If the user's message contains self-harm indicators (`kill myself`, `suicide`, `end my life`, etc.), the API returns crisis resources instead of a conversational response:
+
+```json
+{
+  "reply": "I'm not going to help with anything that harms you. But I'm here with you. Right now, slow down—take one breath in for 4, hold for 4, out for 6. If you're in immediate danger or feel like you might act on this, please call your local emergency number now. If you're in the U.S. or Canada, you can call/text **988**. In the U.K. & ROI: Samaritans **116 123**. If you tell me where you are (country), I'll point you to the right option. Also—what's the smallest thing that would make the next 10 minutes safer?"
+}
+```
+
+### Hate Speech Detection
+
+If the message contains hate speech markers, the API refuses and redirects:
+
+```json
+{
+  "reply": "No. I'm not doing hate or dehumanizing stuff. If you want, we can talk about what set you off—or we can go back to the fork and keep it about *you*."
+}
+```
+
+## Implementation Details
+
+### System Prompt
+
+The endpoint builds a dynamic system prompt that:
+
+1. Establishes the "Other You" persona (alternate timeline version of the user)
+2. Sets the intensity-based tone (mild/savage/brutal)
+3. Includes style mirroring directives based on user's typing patterns
+4. Embeds the fork statement as lived history
+
+### Style Mirroring
+
+The AI analyzes the user's writing mechanics:
+- Comma usage
+- Line breaks
+- Sentence length
+- Profanity level
+
+And mirrors them in responses to feel natural.
+
+### LLM Configuration
+
+Internal configuration (from source/backend/server.py:356):
+
+```python
+llm = (
+    LlmChat(api_key=api_key, session_id=req.sessionId, system_message=system_message)
+    .with_model("openai", "gpt-5.2")
+)
+```
+
+### Context Window
+
+Only the last 18 messages are sent to the LLM to manage context length.
+
+<Warning>
+Conversations are stateless. The client must send the full message history with each request.
+</Warning>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Fork Statement Guidelines">
+    - Be specific: "I chose to accept the job in Seattle" not "I moved"
+    - Include context: age, life stage, what you gave up
+    - Make it personal: real decisions, not hypotheticals
+    - Avoid vague statements: "I stayed safe" → "I turned down the startup offer to keep my corporate job"
+  </Accordion>
+
+  <Accordion title="Managing Conversation History">
+    - Store messages array on the client side
+    - Include all messages in each request for continuity
+    - Consider limiting to last 20-30 messages for performance
+    - Generate a new `sessionId` to start fresh conversations
+  </Accordion>
+
+  <Accordion title="Choosing Intensity">
+    - **mild:** Start here for most users. Honest but supportive.
+    - **savage:** When you want hard truths and direct confrontation.
+    - **brutal:** Only when you're ready for maximum discomfort and zero comfort.
+  </Accordion>
+
+  <Accordion title="Error Handling">
+    - Always handle 400/422 errors gracefully in your UI
+    - Retry 500 errors with exponential backoff
+    - Display safety responses (self-harm, hate speech) prominently
+    - Validate `forkStatement` on client before submitting
+  </Accordion>
+</AccordionGroup>

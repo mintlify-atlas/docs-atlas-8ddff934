@@ -1,0 +1,500 @@
+---
+title: Docker Deployment
+description: Run The Fork using Docker and Docker Compose
+---
+
+This guide covers running The Fork application using Docker and Docker Compose. This is the recommended approach for consistent, reproducible deployments.
+
+## Prerequisites
+
+- Docker (latest stable version)
+- Docker Compose (included with Docker Desktop)
+- Emergent LLM API key (required for chat functionality)
+
+## Quick Start
+
+<Steps>
+  <Step title="Clone and navigate to repository">
+    ```bash
+    git clone <repository-url>
+    cd the-fork
+    ```
+  </Step>
+
+  <Step title="Set environment variables">
+    Create `.env` files or set the `EMERGENT_LLM_KEY` environment variable:
+    
+    ```bash
+    export EMERGENT_LLM_KEY="your_emergent_llm_key_here"
+    ```
+    
+    Or create `backend/.env` and `frontend/.env` files as described below.
+  </Step>
+
+  <Step title="Build and start all services">
+    ```bash
+    docker-compose up --build
+    ```
+    
+    This will start three services:
+    - MongoDB on port 27017
+    - Backend API on port 8000
+    - Frontend dev server on port 3000
+  </Step>
+
+  <Step title="Access the application">
+    - Frontend: http://localhost:3000
+    - Backend API: http://localhost:8000/api/
+    - API Docs: http://localhost:8000/api/docs
+    - MongoDB: localhost:27017
+  </Step>
+</Steps>
+
+## Docker Compose Services
+
+The `docker-compose.yml` defines three services:
+
+### MongoDB
+
+```yaml
+mongo:
+  image: mongo:7.0
+  container_name: fork-mongo
+  environment:
+    MONGO_INITDB_ROOT_USERNAME: admin
+    MONGO_INITDB_ROOT_PASSWORD: password
+    MONGO_INITDB_DATABASE: fork_database
+  ports:
+    - "27017:27017"
+  volumes:
+    - mongo_data:/data/db
+```
+
+- **Image**: mongo:7.0
+- **Port**: 27017
+- **Default credentials**: admin/password
+- **Database**: fork_database
+- **Volume**: mongo_data (persists data between restarts)
+
+### Backend API
+
+```yaml
+backend:
+  build:
+    context: ./backend
+    dockerfile: Dockerfile
+  container_name: fork-backend
+  environment:
+    MONGO_URL: "mongodb://admin:password@mongo:27017"
+    DB_NAME: "fork_database"
+    EMERGENT_LLM_KEY: ${EMERGENT_LLM_KEY:-sk-emergent-test}
+    CORS_ORIGINS: "*"
+    SERVER_HOST: "0.0.0.0"
+    SERVER_PORT: "8000"
+  ports:
+    - "8000:8000"
+  depends_on:
+    mongo:
+      condition: service_healthy
+```
+
+- **Port**: 8000
+- **Depends on**: MongoDB (waits for health check)
+- **Volume mount**: `./backend:/app` (for development)
+- **Health check**: GET /api/ every 30s
+
+### Frontend
+
+```yaml
+frontend:
+  build:
+    context: ./frontend
+    dockerfile: Dockerfile.dev
+  container_name: fork-frontend
+  environment:
+    REACT_APP_BACKEND_URL: "http://localhost:8000"
+    WDS_SOCKET_PORT: 443
+    ENABLE_HEALTH_CHECK: "false"
+  ports:
+    - "3000:3000"
+  volumes:
+    - ./frontend/src:/app/src
+    - ./frontend/public:/app/public
+  depends_on:
+    - backend
+```
+
+- **Port**: 3000
+- **Development mode**: Hot reload enabled via volume mounts
+- **Depends on**: Backend API
+
+## Environment Configuration
+
+### Backend Environment Variables
+
+Create `backend/.env`:
+
+```bash backend/.env
+# MongoDB Connection
+MONGO_URL="mongodb://admin:password@mongo:27017"
+DB_NAME="fork_database"
+
+# CORS Configuration
+CORS_ORIGINS="*"
+
+# Emergent LLM Integration (REQUIRED)
+EMERGENT_LLM_KEY=your_emergent_llm_key_here
+
+# Logging (optional)
+LOG_LEVEL="INFO"
+
+# Server (optional)
+SERVER_HOST="0.0.0.0"
+SERVER_PORT=8000
+```
+
+<Warning>
+  The `EMERGENT_LLM_KEY` is required. Set it via environment variable or in the `.env` file. Without it, chat requests will fail with 500 errors.
+</Warning>
+
+### Frontend Environment Variables
+
+Create `frontend/.env`:
+
+```bash frontend/.env
+# Backend API URL
+REACT_APP_BACKEND_URL=http://localhost:8000
+
+# WebSocket Configuration (for development)
+WDS_SOCKET_PORT=443
+
+# Feature Flags
+ENABLE_HEALTH_CHECK=false
+```
+
+## Docker Commands
+
+### Starting Services
+
+<CodeGroup>
+  ```bash Build and start
+  docker-compose up --build
+  ```
+
+  ```bash Start in background
+  docker-compose up -d
+  ```
+
+  ```bash Start specific service
+  docker-compose up backend
+  ```
+</CodeGroup>
+
+### Stopping Services
+
+<CodeGroup>
+  ```bash Stop services
+  docker-compose down
+  ```
+
+  ```bash Stop and remove volumes
+  docker-compose down -v
+  ```
+
+  ```bash Stop specific service
+  docker-compose stop backend
+  ```
+</CodeGroup>
+
+### Viewing Logs
+
+<CodeGroup>
+  ```bash All services
+  docker-compose logs -f
+  ```
+
+  ```bash Backend only
+  docker-compose logs -f backend
+  ```
+
+  ```bash Frontend only
+  docker-compose logs -f frontend
+  ```
+
+  ```bash MongoDB only
+  docker-compose logs -f mongo
+  ```
+</CodeGroup>
+
+### Rebuilding After Code Changes
+
+```bash
+# Rebuild images
+docker-compose build
+
+# Rebuild specific service
+docker-compose build backend
+
+# Rebuild and restart
+docker-compose up --build
+```
+
+<Note>
+  With volume mounts for development, frontend changes auto-reload without rebuilding. Backend changes require a restart.
+</Note>
+
+### Accessing Container Shells
+
+<CodeGroup>
+  ```bash Backend shell
+  docker-compose exec backend sh
+  ```
+
+  ```bash Frontend shell
+  docker-compose exec frontend sh
+  ```
+
+  ```bash MongoDB shell
+  docker-compose exec mongo mongosh --username admin --password password
+  ```
+</CodeGroup>
+
+### Running Tests
+
+<CodeGroup>
+  ```bash Backend tests
+  docker-compose exec backend pytest
+  ```
+
+  ```bash Backend tests with coverage
+  docker-compose exec backend pytest --cov
+  ```
+
+  ```bash Frontend E2E tests
+  docker run -it \
+    -v "$(pwd)/frontend:/app" \
+    fork-frontend:dev \
+    yarn test:e2e
+  ```
+</CodeGroup>
+
+## Building Individual Images
+
+### Backend Production Image
+
+```bash
+# Build
+docker build -t fork-backend:latest ./backend
+
+# Run
+docker run -d \
+  -p 8000:8000 \
+  -e MONGO_URL="mongodb://mongo:27017" \
+  -e DB_NAME="fork_database" \
+  -e EMERGENT_LLM_KEY="your_key_here" \
+  -e CORS_ORIGINS="*" \
+  --name fork-backend \
+  fork-backend:latest
+```
+
+### Frontend Production Image
+
+The frontend has two Dockerfiles:
+
+- `Dockerfile.dev` - Development mode with hot reload
+- `Dockerfile` - Production build with multi-stage optimization
+
+```bash
+# Build production image
+docker build -t fork-frontend:latest ./frontend
+
+# Run
+docker run -d \
+  -p 3000:3000 \
+  -e REACT_APP_BACKEND_URL="http://localhost:8000" \
+  --name fork-frontend \
+  fork-frontend:latest
+```
+
+The production Dockerfile uses a multi-stage build:
+1. Stage 1: Build the React app with Node 18
+2. Stage 2: Serve the built files with `serve` on port 3000
+
+## Health Checks
+
+All services include health checks configured in docker-compose.yml:
+
+```bash
+# Check service status
+docker-compose ps
+
+# View detailed health status
+docker inspect fork-backend --format='{{json .State.Health}}' | jq
+```
+
+Health check endpoints:
+- **Backend**: `curl http://localhost:8000/api/`
+- **Frontend**: `wget --spider http://localhost:3000`
+- **MongoDB**: `mongosh --eval "db.adminCommand('ping')"`
+
+## Networking
+
+Services communicate through the `fork-network` bridge network:
+
+- Backend → MongoDB: `mongodb://mongo:27017`
+- Frontend → Backend: `http://backend:8000` (internal) or `http://localhost:8000` (from host)
+- From host → Services: Use `localhost` with exposed ports
+
+```bash
+# Inspect network
+docker network inspect fork-network
+
+# View connected containers
+docker network inspect fork-network --format='{{range .Containers}}{{.Name}} {{end}}'
+```
+
+## Troubleshooting
+
+### MongoDB connection error
+
+<AccordionGroup>
+  <Accordion title="Check MongoDB logs">
+    ```bash
+    docker-compose logs mongo
+    ```
+  </Accordion>
+
+  <Accordion title="Verify credentials">
+    ```bash
+    docker-compose exec mongo mongosh \
+      --username admin \
+      --password password \
+      --authenticationDatabase admin
+    ```
+  </Accordion>
+
+  <Accordion title="Check network connectivity">
+    ```bash
+    docker-compose exec backend ping mongo
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Backend not starting
+
+<AccordionGroup>
+  <Accordion title="Check logs">
+    ```bash
+    docker-compose logs backend
+    ```
+  </Accordion>
+
+  <Accordion title="Verify environment variables">
+    ```bash
+    docker-compose exec backend env | grep EMERGENT_LLM_KEY
+    docker-compose exec backend env | grep MONGO
+    ```
+  </Accordion>
+
+  <Accordion title="Test MongoDB connection">
+    ```bash
+    docker-compose exec backend python -c "import pymongo; print(pymongo.__version__)"
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Frontend can't connect to backend
+
+<AccordionGroup>
+  <Accordion title="Verify backend is running">
+    ```bash
+    docker-compose ps backend
+    curl http://localhost:8000/api/
+    ```
+  </Accordion>
+
+  <Accordion title="Check REACT_APP_BACKEND_URL">
+    ```bash
+    docker-compose exec frontend env | grep REACT_APP_BACKEND_URL
+    ```
+  </Accordion>
+
+  <Accordion title="Test from frontend container">
+    ```bash
+    docker-compose exec frontend wget -O- http://backend:8000/api/
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Port already in use
+
+```bash
+# Find process using port
+lsof -i :3000
+lsof -i :8000
+lsof -i :27017
+
+# Kill process (replace PID)
+kill -9 <PID>
+
+# Or change port in docker-compose.yml
+# e.g., "3001:3000" to use port 3001 on host
+```
+
+### Container keeps restarting
+
+```bash
+# Check health status
+docker-compose ps
+
+# View last 100 log lines
+docker-compose logs --tail=100 <service-name>
+
+# Disable health check temporarily (edit docker-compose.yml)
+# Comment out healthcheck section and restart
+```
+
+## Data Persistence
+
+MongoDB data is persisted in the `mongo_data` volume:
+
+```bash
+# List volumes
+docker volume ls
+
+# Inspect volume
+docker volume inspect the-fork_mongo_data
+
+# Remove volume (deletes all data)
+docker-compose down -v
+```
+
+<Warning>
+  Running `docker-compose down -v` will delete all MongoDB data. Backup important data before removing volumes.
+</Warning>
+
+## Production Considerations
+
+For production deployments, consider:
+
+1. **Use production Dockerfiles** with optimized builds
+2. **Restrict CORS_ORIGINS** to your domain
+3. **Use Docker secrets** for sensitive environment variables
+4. **Add reverse proxy** (Nginx) for SSL/TLS
+5. **Configure resource limits** in docker-compose.yml
+6. **Implement log aggregation** (ELK stack, CloudWatch, etc.)
+7. **Add monitoring** (Prometheus, Grafana, etc.)
+8. **Set up automated backups** for MongoDB
+
+See the [Production Deployment](/deployment/production) guide for detailed information.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Local Development" icon="laptop-code" href="/deployment/local-development">
+    Run without Docker for faster iteration
+  </Card>
+  <Card title="Production Deployment" icon="server" href="/deployment/production">
+    Production best practices and security
+  </Card>
+</CardGroup>

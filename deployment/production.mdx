@@ -1,0 +1,932 @@
+---
+title: Production Deployment
+description: Best practices and considerations for deploying The Fork to production
+---
+
+This guide covers production deployment considerations for The Fork application, including security, performance, monitoring, and infrastructure best practices.
+
+<Warning>
+  The Fork deals with sensitive personal conversations. Production deployments require careful consideration of ethics, safety, moderation, and user privacy.
+</Warning>
+
+## Pre-Deployment Checklist
+
+Before deploying to production:
+
+- [ ] Ethics review completed
+- [ ] Content moderation strategy defined
+- [ ] Crisis resources integrated
+- [ ] Privacy policy created
+- [ ] Terms of service defined
+- [ ] Rate limiting configured
+- [ ] Monitoring and alerting set up
+- [ ] Backup strategy implemented
+- [ ] Incident response plan created
+- [ ] Security audit completed
+
+## Security Configuration
+
+### CORS Settings
+
+<Warning>
+  Never use `CORS_ORIGINS="*"` in production. This allows any website to make requests to your API.
+</Warning>
+
+Restrict CORS to your frontend domain:
+
+```bash backend/.env
+# Single origin
+CORS_ORIGINS="https://yourdomain.com"
+
+# Multiple origins (comma-separated)
+CORS_ORIGINS="https://yourdomain.com,https://www.yourdomain.com"
+```
+
+### Environment Secrets
+
+Never commit `.env` files or hardcode secrets:
+
+<CodeGroup>
+  ```bash Docker Secrets
+  # Create secrets
+  echo "your_emergent_key" | docker secret create emergent_llm_key -
+  echo "mongodb://user:pass@host" | docker secret create mongo_url -
+
+  # Reference in docker-compose.yml
+  services:
+    backend:
+      secrets:
+        - emergent_llm_key
+        - mongo_url
+      environment:
+        EMERGENT_LLM_KEY_FILE: /run/secrets/emergent_llm_key
+        MONGO_URL_FILE: /run/secrets/mongo_url
+
+  secrets:
+    emergent_llm_key:
+      external: true
+    mongo_url:
+      external: true
+  ```
+
+  ```bash Kubernetes Secrets
+  # Create secret
+  kubectl create secret generic fork-secrets \
+    --from-literal=emergent-llm-key=your_key \
+    --from-literal=mongo-url=mongodb://user:pass@host
+
+  # Reference in deployment
+  env:
+    - name: EMERGENT_LLM_KEY
+      valueFrom:
+        secretKeyRef:
+          name: fork-secrets
+          key: emergent-llm-key
+  ```
+
+  ```bash AWS Secrets Manager
+  # Store secret
+  aws secretsmanager create-secret \
+    --name fork/emergent-llm-key \
+    --secret-string "your_key"
+
+  # Retrieve in application startup
+  # or use AWS SDK to fetch at runtime
+  ```
+</CodeGroup>
+
+### TLS/SSL Configuration
+
+Always use HTTPS in production. Use a reverse proxy like Nginx:
+
+```nginx nginx.conf
+server {
+    listen 80;
+    server_name yourdomain.com;
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name yourdomain.com;
+
+    ssl_certificate /etc/nginx/ssl/cert.pem;
+    ssl_certificate_key /etc/nginx/ssl/key.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+
+    # Frontend
+    location / {
+        proxy_pass http://frontend:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Backend API
+    location /api/ {
+        proxy_pass http://backend:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+For Let's Encrypt SSL certificates:
+
+```bash
+# Install certbot
+sudo apt-get install certbot python3-certbot-nginx
+
+# Obtain certificate
+sudo certbot --nginx -d yourdomain.com -d www.yourdomain.com
+
+# Auto-renewal is configured automatically
+```
+
+## Rate Limiting
+
+Protect your API and LLM costs with rate limiting:
+
+### Nginx Rate Limiting
+
+```nginx nginx.conf
+http {
+    # Define rate limit zones
+    limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/m;
+    limit_req_zone $binary_remote_addr zone=chat_limit:10m rate=5r/m;
+
+    server {
+        # General API endpoints
+        location /api/ {
+            limit_req zone=api_limit burst=20 nodelay;
+            proxy_pass http://backend:8000;
+        }
+
+        # Chat endpoint (more restrictive)
+        location /api/chat {
+            limit_req zone=chat_limit burst=3 nodelay;
+            proxy_pass http://backend:8000;
+        }
+    }
+}
+```
+
+### Application-Level Rate Limiting
+
+Add to `backend/server.py`:
+
+```python
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+@api_router.post("/chat")
+@limiter.limit("5/minute")
+async def chat_endpoint(request: Request, chat_request: ChatRequest):
+    # ... existing code
+```
+
+Install dependency:
+
+```bash
+pip install slowapi
+```
+
+## Database Configuration
+
+### MongoDB Production Setup
+
+<Steps>
+  <Step title="Enable authentication">
+    Create admin and application users:
+    
+    ```javascript
+    use admin
+    db.createUser({
+      user: "admin",
+      pwd: "secure_admin_password",
+      roles: [{ role: "userAdminAnyDatabase", db: "admin" }]
+    })
+
+    use fork_database
+    db.createUser({
+      user: "fork_app",
+      pwd: "secure_app_password",
+      roles: [{ role: "readWrite", db: "fork_database" }]
+    })
+    ```
+  </Step>
+
+  <Step title="Configure replica set">
+    For high availability:
+    
+    ```bash
+    # Initialize replica set
+    mongosh --eval 'rs.initiate()'
+
+    # Add members
+    rs.add("mongodb-2:27017")
+    rs.add("mongodb-3:27017")
+    ```
+  </Step>
+
+  <Step title="Enable encryption at rest">
+    ```yaml docker-compose.yml
+    mongo:
+      command: mongod --enableEncryption --encryptionKeyFile /etc/mongodb-keyfile
+      volumes:
+        - ./mongodb-keyfile:/etc/mongodb-keyfile:ro
+    ```
+  </Step>
+
+  <Step title="Configure backups">
+    ```bash
+    # Automated backup script
+    #!/bin/bash
+    DATE=$(date +%Y%m%d_%H%M%S)
+    mongodump --uri="mongodb://user:pass@host/fork_database" \
+      --out="/backups/fork_${DATE}"
+
+    # Compress and upload to S3
+    tar -czf "/backups/fork_${DATE}.tar.gz" "/backups/fork_${DATE}"
+    aws s3 cp "/backups/fork_${DATE}.tar.gz" s3://your-bucket/backups/
+
+    # Cleanup old backups (keep last 30 days)
+    find /backups -name "fork_*.tar.gz" -mtime +30 -delete
+    ```
+    
+    Add to crontab:
+    ```bash
+    # Daily backup at 2 AM
+    0 2 * * * /path/to/backup-script.sh
+    ```
+  </Step>
+</Steps>
+
+<Note>
+  While MongoDB is included in the template, The Fork application is stateless and doesn't persist conversations. You may choose to disable MongoDB if not using the optional template endpoints.
+</Note>
+
+## Monitoring and Observability
+
+### Application Monitoring
+
+<Tabs>
+  <Tab title="Prometheus + Grafana">
+    Add Prometheus metrics to FastAPI:
+
+    ```python backend/server.py
+    from prometheus_fastapi_instrumentator import Instrumentator
+
+    app = FastAPI(...)
+    Instrumentator().instrument(app).expose(app)
+    ```
+
+    Configure Prometheus:
+
+    ```yaml prometheus.yml
+    scrape_configs:
+      - job_name: 'fork-backend'
+        static_configs:
+          - targets: ['backend:8000']
+    ```
+
+    Create Grafana dashboards for:
+    - Request rate and latency
+    - Error rates by endpoint
+    - LLM API call success/failure
+    - Active sessions
+  </Tab>
+
+  <Tab title="CloudWatch (AWS)">
+    ```python
+    import boto3
+    import logging
+
+    # Configure CloudWatch logging
+    cloudwatch = boto3.client('logs')
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+
+    # Add CloudWatch handler
+    from watchtower import CloudWatchLogHandler
+    handler = CloudWatchLogHandler(log_group='/fork/backend')
+    logger.addHandler(handler)
+    ```
+
+    Create CloudWatch alarms for:
+    - High error rate (> 5% in 5 minutes)
+    - Slow response times (p95 > 2s)
+    - LLM API failures
+  </Tab>
+
+  <Tab title="Datadog">
+    ```python
+    from ddtrace import patch_all, tracer
+
+    patch_all()
+
+    tracer.configure(
+        hostname='agent-hostname',
+        port=8126,
+    )
+
+    # Add custom metrics
+    from datadog import statsd
+
+    @api_router.post("/chat")
+    async def chat_endpoint(...):
+        statsd.increment('fork.chat.requests')
+        with statsd.timed('fork.chat.duration'):
+            # ... existing code
+    ```
+  </Tab>
+</Tabs>
+
+### Health Checks and Uptime Monitoring
+
+```python backend/server.py
+from fastapi import status
+
+@api_router.get(
+    "/health",
+    status_code=status.HTTP_200_OK,
+    tags=["health"]
+)
+async def health_check():
+    """Comprehensive health check endpoint"""
+    health_status = {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "checks": {}
+    }
+
+    # Check MongoDB
+    try:
+        await db.command('ping')
+        health_status["checks"]["mongodb"] = "ok"
+    except Exception as e:
+        health_status["checks"]["mongodb"] = f"error: {str(e)}"
+        health_status["status"] = "degraded"
+
+    # Check LLM API
+    try:
+        llm_key = os.getenv("EMERGENT_LLM_KEY")
+        health_status["checks"]["llm_key"] = "configured" if llm_key else "missing"
+        if not llm_key:
+            health_status["status"] = "degraded"
+    except Exception as e:
+        health_status["checks"]["llm_key"] = f"error: {str(e)}"
+        health_status["status"] = "degraded"
+
+    return health_status
+```
+
+Configure uptime monitoring (e.g., UptimeRobot, Pingdom, StatusCake):
+- Monitor: https://yourdomain.com/api/health
+- Frequency: Every 5 minutes
+- Alert: Email/SMS on failure
+
+## Logging Strategy
+
+### Structured Logging
+
+```python backend/server.py
+import logging
+import json
+from datetime import datetime
+
+class StructuredLogger:
+    def __init__(self, name):
+        self.logger = logging.getLogger(name)
+        self.logger.setLevel(logging.INFO)
+
+    def log(self, level, message, **kwargs):
+        log_entry = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "level": level,
+            "message": message,
+            **kwargs
+        }
+        self.logger.log(getattr(logging, level.upper()), json.dumps(log_entry))
+
+logger = StructuredLogger("fork-backend")
+
+@api_router.post("/chat")
+async def chat_endpoint(request: Request, chat_request: ChatRequest):
+    session_id = chat_request.sessionId
+    logger.log("info", "Chat request received", 
+               session_id=session_id,
+               intensity=chat_request.intensity,
+               message_count=len(chat_request.messages))
+    
+    try:
+        # ... process request
+        logger.log("info", "Chat response sent",
+                   session_id=session_id,
+                   response_length=len(reply))
+    except Exception as e:
+        logger.log("error", "Chat request failed",
+                   session_id=session_id,
+                   error=str(e),
+                   traceback=traceback.format_exc())
+        raise
+```
+
+### Log Aggregation
+
+Centralize logs for analysis:
+
+<CodeGroup>
+  ```yaml ELK Stack (docker-compose.yml)
+  elasticsearch:
+    image: elasticsearch:8.11.0
+    environment:
+      - discovery.type=single-node
+    ports:
+      - 9200:9200
+
+  logstash:
+    image: logstash:8.11.0
+    volumes:
+      - ./logstash.conf:/usr/share/logstash/pipeline/logstash.conf
+    depends_on:
+      - elasticsearch
+
+  kibana:
+    image: kibana:8.11.0
+    ports:
+      - 5601:5601
+    depends_on:
+      - elasticsearch
+  ```
+
+  ```python CloudWatch Logs
+  import watchtower
+  import logging
+
+  logger = logging.getLogger(__name__)
+  logger.addHandler(watchtower.CloudWatchLogHandler(
+      log_group='/fork/backend',
+      stream_name='production'
+  ))
+  ```
+</CodeGroup>
+
+## Performance Optimization
+
+### Caching Strategy
+
+<Warning>
+  Do not cache personalized chat responses. Each conversation is unique and session-specific.
+</Warning>
+
+Cache static content and health checks:
+
+```python
+from functools import lru_cache
+from fastapi_cache import FastAPICache
+from fastapi_cache.backends.redis import RedisBackend
+from fastapi_cache.decorator import cache
+from redis import asyncio as aioredis
+
+@app.on_event("startup")
+async def startup():
+    redis = aioredis.from_url("redis://redis:6379")
+    FastAPICache.init(RedisBackend(redis), prefix="fork-cache")
+
+@api_router.get("/")
+@cache(expire=60)  # Cache for 60 seconds
+async def root():
+    return {"message": "The Fork API is alive."}
+```
+
+### Resource Limits
+
+Set resource limits in docker-compose.yml:
+
+```yaml docker-compose.yml
+services:
+  backend:
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  frontend:
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  mongo:
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+```
+
+### Horizontal Scaling
+
+For high traffic:
+
+```yaml docker-compose.yml
+services:
+  backend:
+    deploy:
+      replicas: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+```
+
+Add load balancer (Nginx):
+
+```nginx
+upstream backend_servers {
+    least_conn;
+    server backend-1:8000;
+    server backend-2:8000;
+    server backend-3:8000;
+}
+
+server {
+    location /api/ {
+        proxy_pass http://backend_servers;
+    }
+}
+```
+
+## Safety and Ethics in Production
+
+### Content Moderation
+
+The Fork includes built-in safety checks in `backend/server.py`:
+
+1. **Self-harm detection** - Returns crisis resources instead of engaging
+2. **Hate speech detection** - Refuses and redirects conversation
+3. **System prompt guardrails** - Forbids slurs and abusive content
+
+Enhance with additional layers:
+
+```python
+from better_profanity import profanity
+from detoxify import Detoxify
+
+# Initialize toxicity detector
+detoxify_model = Detoxify('original')
+
+def check_toxicity(text: str) -> dict:
+    """Check text for toxicity"""
+    results = detoxify_model.predict(text)
+    return {
+        "toxicity": results["toxicity"],
+        "severe_toxicity": results["severe_toxicity"],
+        "identity_attack": results["identity_attack"],
+        "threat": results["threat"]
+    }
+
+@api_router.post("/chat")
+async def chat_endpoint(request: Request, chat_request: ChatRequest):
+    # Check user message
+    user_message = chat_request.messages[-1].content
+    toxicity = check_toxicity(user_message)
+    
+    if toxicity["severe_toxicity"] > 0.8:
+        logger.log("warning", "Severe toxicity detected",
+                   session_id=chat_request.sessionId,
+                   toxicity_score=toxicity["severe_toxicity"])
+        # Handle appropriately
+```
+
+### Crisis Resource Integration
+
+Ensure crisis resources are prominently displayed:
+
+```python backend/server.py
+CRISIS_RESOURCES = {
+    "us": {
+        "name": "988 Suicide & Crisis Lifeline",
+        "phone": "988",
+        "text": "988",
+        "url": "https://988lifeline.org"
+    },
+    "uk": {
+        "name": "Samaritans",
+        "phone": "116 123",
+        "url": "https://www.samaritans.org"
+    },
+    # Add more regions
+}
+
+def get_crisis_response(region: str = "us") -> str:
+    resource = CRISIS_RESOURCES.get(region, CRISIS_RESOURCES["us"])
+    return f"""I notice you may be in distress. Please reach out for immediate support:
+
+{resource['name']}: {resource['phone']}
+Website: {resource['url']}
+
+Your safety matters. Real people are ready to help."""
+```
+
+### User Privacy
+
+<Warning>
+  The Fork is designed to be ephemeral - conversations are NOT persisted. Maintain this privacy-first approach in production.
+</Warning>
+
+Privacy best practices:
+
+1. **No conversation logging** - Do not store user messages or LLM responses
+2. **Minimal metadata** - Only log session IDs, timestamps, and technical metrics
+3. **Data retention policy** - Clear logs older than 30 days
+4. **GDPR compliance** - Provide data deletion on request
+5. **Transparent privacy policy** - Clearly communicate data practices
+
+```python
+# Example: Sanitize logs
+def sanitize_for_logging(data: dict) -> dict:
+    """Remove PII from log data"""
+    sanitized = data.copy()
+    # Remove message content, keep only metadata
+    if "messages" in sanitized:
+        sanitized["message_count"] = len(sanitized["messages"])
+        del sanitized["messages"]
+    if "forkStatement" in sanitized:
+        del sanitized["forkStatement"]
+    return sanitized
+```
+
+## Deployment Platforms
+
+### AWS ECS/Fargate
+
+```yaml task-definition.json
+{
+  "family": "fork-backend",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "containerDefinitions": [
+    {
+      "name": "backend",
+      "image": "your-registry/fork-backend:latest",
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "protocol": "tcp"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "EMERGENT_LLM_KEY",
+          "valueFrom": "arn:aws:secretsmanager:region:account:secret:fork/emergent-key"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/fork-backend",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}
+```
+
+### Google Cloud Run
+
+```bash
+# Build and push image
+gcloud builds submit --tag gcr.io/PROJECT_ID/fork-backend
+
+# Deploy
+gcloud run deploy fork-backend \
+  --image gcr.io/PROJECT_ID/fork-backend \
+  --platform managed \
+  --region us-central1 \
+  --set-env-vars="CORS_ORIGINS=https://yourdomain.com" \
+  --set-secrets="EMERGENT_LLM_KEY=fork-emergent-key:latest" \
+  --allow-unauthenticated
+```
+
+### Kubernetes
+
+```yaml deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fork-backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: fork-backend
+  template:
+    metadata:
+      labels:
+        app: fork-backend
+    spec:
+      containers:
+      - name: backend
+        image: your-registry/fork-backend:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: EMERGENT_LLM_KEY
+          valueFrom:
+            secretKeyRef:
+              name: fork-secrets
+              key: emergent-llm-key
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+```
+
+## Cost Optimization
+
+### LLM API Costs
+
+The primary cost is Emergent LLM API calls:
+
+1. **Implement rate limiting** (see above) - 5 requests/minute per user
+2. **Set maximum tokens** - Limit response length
+3. **Monitor usage** - Track API calls and costs
+4. **Implement quotas** - Per-user daily limits
+
+```python
+from emergentintegrations.llm.chat import LlmChat
+
+# Configure max tokens
+llm_chat = LlmChat(
+    provider="openai",
+    model="gpt-5.2",
+    max_tokens=500,  # Limit response length
+    temperature=0.7
+)
+```
+
+### Infrastructure Costs
+
+Optimize cloud spending:
+
+1. **Use spot instances** for non-critical workloads
+2. **Auto-scaling** - Scale down during low traffic
+3. **Reserved instances** for predictable base load
+4. **CDN for static assets** (CloudFront, Cloudflare)
+5. **Optimize Docker images** - Smaller images = faster deploys, lower storage
+
+## Disaster Recovery
+
+### Backup Strategy
+
+1. **MongoDB backups** - Daily automated backups to S3
+2. **Configuration backups** - Version control all configs
+3. **Docker image registry** - Retain last 10 versions
+4. **Secrets backup** - Encrypted backup of secrets in secure location
+
+### Incident Response Plan
+
+<Steps>
+  <Step title="Incident Detection">
+    - Automated alerts via monitoring
+    - User reports via support channels
+    - Health check failures
+  </Step>
+
+  <Step title="Assessment">
+    - Severity level (P0-P4)
+    - Impact scope (users affected)
+    - Root cause analysis
+  </Step>
+
+  <Step title="Response">
+    - P0 (Critical): Immediate rollback or failover
+    - P1 (High): Fix within 1 hour
+    - P2 (Medium): Fix within 4 hours
+    - P3 (Low): Fix within 24 hours
+  </Step>
+
+  <Step title="Resolution">
+    - Apply fix
+    - Verify resolution
+    - Post-mortem documentation
+  </Step>
+
+  <Step title="Prevention">
+    - Update runbooks
+    - Add monitoring/alerts
+    - Improve tests
+  </Step>
+</Steps>
+
+### Rollback Procedure
+
+```bash
+# Tag current version
+docker tag fork-backend:latest fork-backend:backup-$(date +%Y%m%d)
+
+# Rollback to previous version
+docker pull your-registry/fork-backend:v1.2.3
+docker tag your-registry/fork-backend:v1.2.3 fork-backend:latest
+
+# Restart services
+docker-compose up -d backend
+
+# Verify
+curl http://localhost:8000/api/health
+```
+
+## Compliance Considerations
+
+### GDPR (European Union)
+
+- Right to access: Provide user data on request
+- Right to deletion: Delete user data on request
+- Data minimization: Only collect necessary data
+- Privacy by design: Built-in privacy features
+
+### CCPA (California)
+
+- Disclosure: Inform users about data collection
+- Opt-out: Allow users to opt out of data sale
+- Deletion: Delete user data on request
+
+### HIPAA (Healthcare)
+
+<Warning>
+  The Fork is NOT designed for healthcare use. Do not use for therapeutic purposes without proper licensing and HIPAA compliance.
+</Warning>
+
+## Final Recommendations
+
+<CardGroup cols={2}>
+  <Card title="Start Small" icon="seedling">
+    Begin with minimal infrastructure. Scale as traffic grows.
+  </Card>
+  <Card title="Monitor Everything" icon="chart-line">
+    Comprehensive monitoring prevents surprises. Track metrics, logs, and costs.
+  </Card>
+  <Card title="Automate Wisely" icon="robot">
+    Automate deployments, backups, and monitoring. Keep manual overrides available.
+  </Card>
+  <Card title="Plan for Failure" icon="shield-halved">
+    Assume components will fail. Design for resilience and quick recovery.
+  </Card>
+</CardGroup>
+
+<Warning>
+  **Ethics First**: Before scaling, ensure you have proper content moderation, crisis resources, and ethical guidelines in place. The Fork deals with personal, potentially sensitive conversations.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Local Development" icon="laptop-code" href="/deployment/local-development">
+    Set up local development environment
+  </Card>
+  <Card title="Docker Deployment" icon="docker" href="/deployment/docker">
+    Deploy using Docker Compose
+  </Card>
+</CardGroup>

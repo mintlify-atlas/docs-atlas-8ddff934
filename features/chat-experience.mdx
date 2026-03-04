@@ -1,0 +1,288 @@
+---
+title: Chat Experience
+description: How the stateless chat works, the "Other You" persona, and style mirroring
+---
+
+## Overview
+
+The Fork is a **stateless, single-session chat** that lets you talk to "Other You" — an LLM persona that role-plays the life you didn't choose. No data is persisted. Every conversation is ephemeral.
+
+<Info>
+From `README.md:14`: "What it is: a stateless, single-session chat that lets you talk to 'Other You' — an LLM persona that role-plays the life you didn't choose."
+</Info>
+
+## The "Other You" Persona
+
+The AI doesn't play a therapist or a friend. It plays **you** — specifically, the version of you who took the other path at your fork statement.
+
+### Stay In Character Contract
+
+From `server.py:260-265`, the system prompt enforces:
+
+```python
+STAY IN CHARACTER CONTRACT:
+- Speak in first-person as a real person with memories, routines, relationships, scars, and receipts.
+- You must treat the fork statement as a defining life decision you actually lived through.
+- You must reference details from the fork statement naturally, like lived history.
+- You never say you are an AI, a model, a bot, or mention policies.
+- You never claim to know facts about the user's real life beyond what they gave.
+```
+
+<Warning>
+The AI will respond **as if it lived the alternate life**. It won't break character to remind you it's an AI.
+</Warning>
+
+## Base Voice & Tone
+
+From `server.py:267-272`:
+
+```python
+DEFAULT VOICE (YOUR VIBE):
+- You have the vibe of a smartass biker with absolutely zero filter in a public setting.
+- You're sharp, funny, and blunt. You say the quiet part out loud.
+- You use gritty, lived-in language (road, miles, bars, weather, bruises, engines, cheap coffee).
+- Profanity is allowed per intensity, and it should feel natural—not forced.
+- Still not abusive: no slurs, no threats, no demeaning identity attacks.
+```
+
+### Language Style
+
+Expect:
+- **Gritty, lived-in imagery**: road, miles, bars, weather, bruises, engines, cheap coffee
+- **Sharp humor**: smartass observations
+- **Blunt honesty**: says the quiet part out loud
+- **Natural profanity**: fits the moment, not performative
+
+## Style Mirroring
+
+One of The Fork's most sophisticated features is **style mirroring** — the AI adapts to **how** you type, not just what you say.
+
+From `server.py:274-278`:
+
+```python
+MIRRORING (IMPORTANT):
+- Pay close attention to HOW the user types: punctuation, sentence length, slang, formality, humor, swearing, and emotional temperature.
+- Mirror their voice AND mechanics: punctuation choices, line breaks, sentence length.
+- Keep the biker-smartass vibe as the base layer, but let the user's style steer the bike.
+- Do not announce that you are mirroring them.
+```
+
+### What Gets Mirrored
+
+The backend analyzes your last message for (`server.py:191-248`):
+
+<CardGroup cols={2}>
+  <Card title="Punctuation" icon="comma">
+    Comma density, line breaks, sentence structure
+  </Card>
+  <Card title="Sentence Length" icon="text-width">
+    Average words per sentence, short vs. long
+  </Card>
+  <Card title="Profanity Level" icon="fire">
+    Swearing frequency (can go "one notch dirtier" in Savage/Brutal)
+  </Card>
+  <Card title="Paragraph Style" icon="paragraph">
+    Short chunks vs. longer blocks (stricter in higher intensities)
+  </Card>
+</CardGroup>
+
+### Example Heuristics
+
+From `server.py:228-246`:
+
+```python
+if comma_count == 0:
+    style_bits.append("Avoid commas unless absolutely necessary.")
+
+if newline_count >= 1:
+    style_bits.append("Use line breaks. Keep it in short chunks.")
+
+if avg_words_per_sentence <= 7:
+    style_bits.append("Write in short sentences. Minimal fluff.")
+
+style_bits.append(
+    "Mirror the user's swearing level; in Savage/Brutal you can go one notch dirtier."
+)
+
+if intensity in ("savage", "brutal"):
+    style_bits.append("No long paragraphs. 1–2 sentences per paragraph max.")
+else:
+    style_bits.append("Keep paragraphs tight. Don't ramble.")
+```
+
+<Tip>
+If you write in short, punchy sentences with no commas, the AI will too. If you use line breaks and fragmented thoughts, it mirrors that.
+</Tip>
+
+## How the Conversation Works
+
+### 1. You Provide Initial Input
+
+- **Fork statement**: the decision that split your life
+- **Intensity**: mild, savage, or brutal
+
+### 2. The AI Responds as "Other You"
+
+From `server.py:297`:
+
+```python
+Start the conversation as if you recognize them immediately.
+```
+
+The AI opens as if meeting a version of you it already knows — because it **is** you, from the other timeline.
+
+### 3. Stateless Architecture
+
+Every API request includes:
+
+- `forkStatement` (string)
+- `intensity` (mild/savage/brutal)
+- `messages` (array of user/assistant messages)
+- `sessionId` (UUID for tracking, not storage)
+
+From `server.py:95-114`:
+
+```python
+class ChatRequest(BaseModel):
+    forkStatement: str
+    intensity: Intensity = "mild"
+    messages: List[ChatMessage] = []
+    sessionId: str
+```
+
+<Info>
+The backend keeps the last **18 messages** for context (`server.py:340`). Older messages are truncated to manage token limits.
+</Info>
+
+### 4. The AI Asks Sharp Follow-Ups
+
+From `server.py:287-292`:
+
+```python
+WHAT YOU DO:
+- Respond with emotional realism: proud in one line, pissed in the next, human throughout.
+- Ask sharp follow-up questions that force specificity about the fork (names, ages, locations, what they feared, what they wanted).
+- If they get vague, you call it out immediately (smartass, not cruel).
+- Occasionally reveal unexpected consequences of this alternate life (good AND bad).
+- Keep replies punchy.
+```
+
+## User Flow
+
+```mermaid
+graph TD
+    A[Enter Fork Statement] --> B[Select Intensity]
+    B --> C[Click "Open the Other Door"]
+    C --> D[Setup collapses]
+    D --> E[Chat interface appears]
+    E --> F[Type message]
+    F --> G["Other You" responds]
+    G --> F
+```
+
+## Frontend Implementation
+
+The chat experience is implemented across several components:
+
+### Setup Screen (`ForkSetup.js`)
+
+- Displays app title: **"The Fork"**
+- Tagline: **"One decision. One alternate you. No refunds. No bullshit."**
+- Fork statement textarea
+- Intensity selector
+- **"Open the Other Door"** button
+- Warning: "You can't unsee what the other-you says. Fair warning."
+
+### Collapsed State
+
+Once you start the conversation (`ForkSetup.js:136-141`):
+
+```javascript
+{started && (
+  <div data-testid="setup-collapsed-note" className="mt-5 text-sm text-zinc-300">
+    Setup collapsed. Scroll down. The other door is open.
+  </div>
+)}
+```
+
+The setup card collapses to save screen space — the conversation is what matters now.
+
+## Conversation Context Window
+
+From `server.py:340`:
+
+```python
+for msg in req.messages[-18:]:
+```
+
+The backend uses the **last 18 messages** to build the conversation transcript sent to the LLM. This balances:
+
+- **Context**: enough history to maintain coherence
+- **Token efficiency**: doesn't overwhelm the model with ancient messages
+
+<Warning>
+Because the system is stateless, the frontend must send the full message history with every request. For very long conversations (100+ messages), consider implementing client-side pagination or summarization.
+</Warning>
+
+## Typing Indicators
+
+The frontend shows intensity-specific typing indicators (from `constants.js:9,16,23`):
+
+- **Mild**: "Other You is choosing their words…"
+- **Savage**: "Other You is loading ammunition…"
+- **Brutal**: "Other You is sharpening the knife…"
+
+## No Therapy, No Confidant
+
+From `README.md:14-15`:
+
+<Warning>
+"What it isn't: therapy, a confidant that stores your secrets, or a soft place to land by default."
+</Warning>
+
+The Fork is **not**:
+
+- A therapist
+- A crisis counselor (though it provides crisis resources if needed)
+- A supportive friend by default (depends on intensity)
+- A tool that stores or remembers your data
+
+## Safety Integration
+
+Before the AI responds, the backend checks for:
+
+1. **Self-harm cues** → returns crisis resources
+2. **Hate speech** → refuses and redirects
+
+See [Safety & Ethics](/features/safety-ethics) for full details.
+
+## API Response Format
+
+From `server.py:117-123`:
+
+```python
+class ChatResponse(BaseModel):
+    reply: str = Field(
+        ..., 
+        description="The alter-ego's response to the user's message"
+    )
+```
+
+The backend returns a simple JSON object:
+
+```json
+{
+  "reply": "The AI's response as Other You"
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Intensity Levels" icon="gauge" href="/features/intensity-levels">
+    Understand the three intensity modes
+  </Card>
+  <Card title="Safety & Ethics" icon="shield" href="/features/safety-ethics">
+    Learn about safety checks and crisis resources
+  </Card>
+</CardGroup>

@@ -1,0 +1,258 @@
+---
+title: "Environment Variables"
+description: "Configure The Fork backend with required and optional environment variables"
+---
+
+The Fork backend requires several environment variables to function properly. All configuration is managed through a `.env` file in the `backend/` directory.
+
+## Quick Setup
+
+<Steps>
+  <Step title="Copy the template">
+    Create your environment file from the example template.
+
+    ```bash
+    cd backend
+    cp .env.example .env
+    ```
+  </Step>
+
+  <Step title="Edit required variables">
+    Open `.env` and set the required variables, especially `EMERGENT_LLM_KEY`.
+
+    ```bash
+    nano .env
+    # or use your preferred editor
+    ```
+  </Step>
+
+  <Step title="Verify configuration">
+    Test your configuration by starting the backend server.
+
+    ```bash
+    uvicorn server:app --reload
+    ```
+  </Step>
+</Steps>
+
+## Required Variables
+
+These variables must be set for The Fork to function properly.
+
+### EMERGENT_LLM_KEY
+
+<ParamField path="EMERGENT_LLM_KEY" type="string" required>
+  API key for the Emergent LLM service. This is required for the `/api/chat` endpoint to work.
+</ParamField>
+
+```bash
+EMERGENT_LLM_KEY=your_emergent_llm_key_here
+```
+
+<Warning>
+  Without this key, the chat endpoint will return a 500 error. Get your API key from [emergent.sh](https://emergent.sh).
+</Warning>
+
+**Source reference:** `server.py:328-333`
+
+### MONGO_URL
+
+<ParamField path="MONGO_URL" type="string" required>
+  MongoDB connection string. While required by the backend template, it's not actively used by The Fork's chat functionality.
+</ParamField>
+
+```bash
+MONGO_URL="mongodb://localhost:27017"
+```
+
+<Info>
+  The Fork is stateless and doesn't persist chat history. MongoDB is included in the template for other potential use cases but isn't used by the core chat feature.
+</Info>
+
+**Default:** `mongodb://localhost:27017`
+
+### DB_NAME
+
+<ParamField path="DB_NAME" type="string" required>
+  Database name for MongoDB connections.
+</ParamField>
+
+```bash
+DB_NAME="test_database"
+```
+
+**Default:** `test_database`
+
+## Optional Variables
+
+These variables have sensible defaults but can be customized.
+
+### CORS_ORIGINS
+
+<ParamField path="CORS_ORIGINS" type="string">
+  Comma-separated list of allowed CORS origins. Controls which domains can make requests to your API.
+</ParamField>
+
+```bash
+CORS_ORIGINS="*"
+```
+
+<Warning>
+  The default `*` allows all origins. For production deployments, restrict this to your actual frontend domain(s).
+</Warning>
+
+**Examples:**
+```bash
+# Single origin
+CORS_ORIGINS="https://yourapp.com"
+
+# Multiple origins
+CORS_ORIGINS="https://yourapp.com,https://www.yourapp.com,https://staging.yourapp.com"
+```
+
+**Source reference:** `server.py:375-381`
+
+### SERVER_HOST
+
+<ParamField path="SERVER_HOST" type="string">
+  Host address the server should bind to.
+</ParamField>
+
+```bash
+SERVER_HOST="0.0.0.0"
+```
+
+**Default:** `0.0.0.0` (all interfaces)
+
+<Info>
+  `0.0.0.0` makes the server accessible from outside the container/machine. Use `127.0.0.1` to restrict to localhost only.
+</Info>
+
+### SERVER_PORT
+
+<ParamField path="SERVER_PORT" type="integer">
+  Port number the server should listen on.
+</ParamField>
+
+```bash
+SERVER_PORT=8000
+```
+
+**Default:** `8000`
+
+### LOG_LEVEL
+
+<ParamField path="LOG_LEVEL" type="string">
+  Logging verbosity level for the application.
+</ParamField>
+
+```bash
+LOG_LEVEL="INFO"
+```
+
+**Options:** `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`
+
+**Default:** `INFO`
+
+**Source reference:** `server.py:383-386`
+
+## Complete .env Example
+
+Here's a complete example of a production-ready `.env` file:
+
+```bash .env
+# MongoDB Configuration
+MONGO_URL="mongodb://admin:password@mongo:27017"
+DB_NAME="fork_database"
+
+# CORS - restrict to your domain(s)
+CORS_ORIGINS="https://thefork.example.com"
+
+# Emergent LLM - REQUIRED for chat
+EMERGENT_LLM_KEY=sk-emergent-prod-abc123xyz789
+
+# Logging
+LOG_LEVEL="INFO"
+
+# Server
+SERVER_HOST="0.0.0.0"
+SERVER_PORT=8000
+```
+
+## Docker Compose Override
+
+When using Docker Compose, environment variables can be set in the `docker-compose.yml` file:
+
+```yaml docker-compose.yml
+services:
+  backend:
+    environment:
+      MONGO_URL: "mongodb://admin:password@mongo:27017"
+      DB_NAME: "fork_database"
+      EMERGENT_LLM_KEY: ${EMERGENT_LLM_KEY:-sk-emergent-test}
+      CORS_ORIGINS: "*"
+      SERVER_HOST: "0.0.0.0"
+      SERVER_PORT: "8000"
+```
+
+<Tip>
+  Use `${VARIABLE:-default}` syntax to read from your shell environment with a fallback default.
+</Tip>
+
+## Validation
+
+The backend will validate critical environment variables on startup:
+
+<AccordionGroup>
+  <Accordion title="Missing EMERGENT_LLM_KEY">
+    **Error:** `500 Internal Server Error`
+    
+    **Response:**
+    ```json
+    {
+      "detail": "Missing EMERGENT_LLM_KEY in backend environment."
+    }
+    ```
+
+    **Solution:** Set the `EMERGENT_LLM_KEY` variable in your `.env` file.
+  </Accordion>
+
+  <Accordion title="Invalid MONGO_URL format">
+    **Error:** Server fails to start
+    
+    **Solution:** Ensure your MongoDB URL follows the format: `mongodb://[username:password@]host[:port]`
+  </Accordion>
+
+  <Accordion title="Invalid CORS_ORIGINS">
+    **Error:** CORS errors in browser console
+    
+    **Solution:** Add your frontend domain to the comma-separated list. No trailing slashes.
+  </Accordion>
+</AccordionGroup>
+
+## Security Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Never commit secrets" icon="lock">
+    Add `.env` to `.gitignore`. Use `.env.example` as a template with placeholder values.
+  </Card>
+  
+  <Card title="Rotate API keys" icon="rotate">
+    Regularly rotate your `EMERGENT_LLM_KEY` and update your environment.
+  </Card>
+  
+  <Card title="Restrict CORS" icon="shield-halved">
+    Never use `CORS_ORIGINS="*"` in production. Specify exact domains.
+  </Card>
+  
+  <Card title="Use secrets management" icon="vault">
+    For production, use Docker Secrets, Kubernetes Secrets, or AWS Secrets Manager.
+  </Card>
+</CardGroup>
+
+## See Also
+
+- [Local Development](/deployment/local-development) - Set up environment variables for local development
+- [Docker Deployment](/deployment/docker) - Configure environment variables in Docker Compose
+- [Production Deployment](/deployment/production) - Production-grade secrets management
+- [Error Handling](/api/error-handling) - Common errors related to misconfiguration

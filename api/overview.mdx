@@ -1,0 +1,143 @@
+---
+title: 'API Overview'
+description: 'FastAPI-powered REST API for conversing with your alternate self'
+---
+
+## Introduction
+
+The Fork API is a FastAPI service that provides an interactive conversation interface with an AI-powered alternate self based on a pivotal life decision you didn't take.
+
+## Base URL
+
+All API endpoints are prefixed with `/api`:
+
+```
+http://localhost:8000/api
+```
+
+## Architecture
+
+The API is built with:
+
+- **FastAPI** - Modern, high-performance Python web framework
+- **Pydantic** - Data validation using Python type annotations
+- **Motor** - Async MongoDB driver (used for template routes, not core functionality)
+- **emergentintegrations** - LLM integration library
+
+### Key Features
+
+- **Stateless Design** - No persistent conversation storage
+- **Client-Managed Sessions** - Session tracking via `sessionId` without server-side state
+- **Safety Checks** - Built-in content moderation for self-harm and hate speech
+- **CORS Enabled** - Configurable cross-origin resource sharing
+
+## Authentication
+
+**No authentication required.** All endpoints are publicly accessible. 
+
+<Note>
+Production deployments should implement rate limiting and authentication to prevent abuse.
+</Note>
+
+## Interactive Documentation
+
+The Fork API provides automatically generated interactive documentation:
+
+### Swagger UI
+
+Access the interactive API explorer at:
+
+```
+http://localhost:8000/api/docs
+```
+
+Features:
+- Try out endpoints directly in the browser
+- View request/response schemas
+- Generate sample requests
+
+### ReDoc
+
+Access the alternative documentation at:
+
+```
+http://localhost:8000/api/redoc
+```
+
+A more readable, print-friendly documentation format.
+
+### OpenAPI Specification
+
+Download the raw OpenAPI 3.0 schema:
+
+```
+http://localhost:8000/api/openapi.json
+```
+
+## API Metadata
+
+```python
+title="The Fork API"
+description="An API for an interactive conversation with your alternate self"
+version="1.0.0"
+```
+
+## CORS Configuration
+
+CORS is enabled for all origins by default. Configure via environment variable:
+
+```bash
+CORS_ORIGINS=https://yourapp.com,https://app.yourapp.com
+```
+
+Default value: `*` (all origins)
+
+## Error Handling
+
+All errors follow a consistent format:
+
+```json
+{
+  "detail": "Human-readable error message"
+}
+```
+
+### Common Status Codes
+
+| Status Code | Meaning |
+|------------|--------|
+| `200` | Success |
+| `400` | Bad Request - Missing or invalid required fields |
+| `422` | Unprocessable Entity - Request doesn't conform to schema |
+| `500` | Internal Server Error - Server or API key issues |
+
+## Environment Variables
+
+Required environment variables:
+
+```bash
+# MongoDB connection (template endpoints only)
+MONGO_URL=mongodb://localhost:27017
+DB_NAME=test_database
+
+# LLM API key (required for /api/chat)
+EMERGENT_LLM_KEY=your_emergent_llm_key
+
+# CORS configuration (optional)
+CORS_ORIGINS=*
+```
+
+<Warning>
+The `/api/chat` endpoint will fail with a 500 error if `EMERGENT_LLM_KEY` is not set.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Chat Endpoint" icon="comments" href="/api/chat">
+    Send messages to your alternate self
+  </Card>
+  <Card title="Health Check" icon="heart-pulse" href="/api/health">
+    Verify API availability
+  </Card>
+</CardGroup>
