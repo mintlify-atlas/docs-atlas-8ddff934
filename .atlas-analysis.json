@@ -1,0 +1,81 @@
+{
+  "projectType": "saas",
+  "projectName": "The Fork",
+  "projectDescription": "A stateless, single-session AI chat application that lets you converse with an alternate version of yourself who took the life path you didn't choose.",
+  "theme": "willow",
+  "primaryColor": "#DC143C",
+  "lightColor": "#FF6B6B",
+  "darkColor": "#B22222",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/fork-statement",
+              "features/intensity-levels",
+              "features/chat-experience",
+              "features/safety-ethics"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/local-development",
+              "deployment/docker",
+              "deployment/production"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Endpoints",
+            "pages": [
+              "api/overview",
+              "api/chat",
+              "api/health"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "api/environment-variables",
+              "api/error-handling"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Stateless single-session chat with alternate self persona",
+    "Three intensity levels: mild, savage, brutal",
+    "AI-powered conversation mirroring and style adaptation",
+    "Built-in safety checks for self-harm and hate speech",
+    "Ephemeral conversations with no persistent storage",
+    "Full-stack React + FastAPI architecture"
+  ],
+  "publicApiSurface": [
+    "POST /api/chat - Chat with alternate self",
+    "GET /api/ - Health check endpoint",
+    "GET /api/docs - Interactive API documentation",
+    "ChatRequest model (forkStatement, intensity, messages, sessionId)",
+    "ChatResponse model (reply)",
+    "IntensityToggle component",
+    "ForkSetup component",
+    "ChatWindow component",
+    "useSessionId hook"
+  ]
+}
